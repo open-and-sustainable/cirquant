@@ -87,6 +87,11 @@ function process_eurostat_data(data, dataset, year)
     dimensions = data.dimension
     values = data.value
     
+    # Count original values for data preservation verification
+    original_value_count = length(values)
+    original_value_sum = sum(v -> typeof(v) <: Number ? v : 0, values(values))
+    @info "Original data contains $original_value_count values with numeric sum $original_value_sum"
+    
     # Identify all dimension names and their possible values
     dim_names = []
     dim_maps = Dict()
@@ -157,13 +162,21 @@ function process_eurostat_data(data, dataset, year)
     # Determine which dimensions to use for row grouping and which for columns
     # This is a heuristic and may need to be adjusted for different datasets
     
-    # Typically, geographical and time dimensions are used for rows
-    # Product codes, indicators, and units are used for columns
-    row_dimensions = ["geo"]  # Dimensions that should define rows
-    col_dimensions = [string(dim) for dim in dim_names if string(dim) != "geo"]  # All other dimensions become columns
+    # We want to maintain a good level of detail in our rows
+    # Use most dimensions for rows to avoid excessive aggregation
+    # Only use unit-like dimensions for columns (typically)
+    
+    # By default, only use 'unit' for columns, keep all other dimensions for rows
+    # This prevents over-aggregation of data
+    col_dimension_names = ["unit"]
+    row_dimensions = [string(dim) for dim in dim_names if !in(string(dim), col_dimension_names)]
+    col_dimensions = col_dimension_names
     
     # Group data by row dimensions
     grouped_data = Dict()
+    
+    # Track all possible column keys
+    all_column_keys = Set()
     
     for (key_str, record) in value_map
         # Create a row key based on row dimensions
@@ -179,8 +192,26 @@ function process_eurostat_data(data, dataset, year)
         col_key_parts = [get(record, dim, "unknown") for dim in col_dimensions]
         col_key = Tuple(col_key_parts)
         
+        # Add to the set of all column keys
+        push!(all_column_keys, col_key)
+        
         # Store the value using the column key
         grouped_data[row_key][col_key] = record["value"]
+    end
+    
+    # Create all possible value column names
+    value_column_names = Dict()
+    for col_key in all_column_keys
+        if isempty(col_dimensions)
+            # If we don't have any column dimensions, just use "value"
+            column_name = Symbol("value")
+        else
+            # Create a descriptive column name from the column dimensions
+            col_parts = ["$(dim)_$(col_key[i])" for (i, dim) in enumerate(col_dimensions)]
+            col_name = join(col_parts, "_")
+            column_name = Symbol("value_$(col_name)")
+        end
+        value_column_names[col_key] = column_name
     end
     
     # Create rows from the grouped data
@@ -201,12 +232,15 @@ function process_eurostat_data(data, dataset, year)
             row[Symbol(dim)] = row_key[i]
         end
         
-        # Add column values
+        # Initialize all possible value columns with missing values
+        for (col_key, column_name) in value_column_names
+            row[column_name] = missing
+        end
+        
+        # Add the actual values this row has
         for (col_key, value) in col_values
-            # Create a descriptive column name from the column dimensions
-            col_parts = ["$(dim)_$(col_key[i])" for (i, dim) in enumerate(col_dimensions)]
-            col_name = join(col_parts, "_")
-            row[Symbol("value_$(col_name)")] = value
+            column_name = value_column_names[col_key]
+            row[column_name] = value
         end
         
         push!(rows, row)
@@ -219,6 +253,36 @@ function process_eurostat_data(data, dataset, year)
     
     # Convert to DataFrame
     df = DataFrame(rows)
+    
+    # Verify data preservation
+    reorganized_value_count = 0
+    reorganized_value_sum = 0
+    
+    # Count all non-missing values in value columns
+    for col_name in names(df)
+        if startswith(string(col_name), "value_") || col_name == :value
+            for val in df[!, col_name]
+                if !ismissing(val) && typeof(val) <: Number
+                    reorganized_value_count += 1
+                    reorganized_value_sum += val
+                end
+            end
+        end
+    end
+    
+    # Verify preservation
+    if reorganized_value_count == original_value_count
+        @info "✓ Data preservation verified: All $original_value_count values successfully preserved"
+        
+        # Additional numeric sum check
+        if isapprox(reorganized_value_sum, original_value_sum)
+            @info "✓ Sum verification passed: Original sum = $original_value_sum, Reorganized sum = $reorganized_value_sum"
+        else
+            @warn "⚠ Sum verification failed: Original sum = $original_value_sum, Reorganized sum = $reorganized_value_sum"
+        end
+    else
+        @error "✗ Data preservation FAILED: Original=$original_value_count values, Reorganized=$reorganized_value_count values"
+    end
     
     return df
 end
