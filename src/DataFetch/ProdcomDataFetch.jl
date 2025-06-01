@@ -24,11 +24,26 @@ function fetch_prodcom_data(years_range="1995-2023")
     db_path = abspath(joinpath(dirname(dirname(dirname(@__FILE__))), "CirQuant-database/raw/CirQuant_1995-2023.duckdb"))
     @info "Using database path: $db_path"
     
+    # Track success/failure statistics
+    stats = Dict(
+        :total_datasets => length(datasets) * (end_year - start_year + 1),
+        :successful => 0,
+        :failed => 0,
+        :rows_processed => 0
+    )
+    
     # Ensure the database directory exists
     db_dir = dirname(db_path)
     if !isdir(db_dir)
         @info "Creating database directory: $db_dir"
         mkpath(db_dir)
+    end
+    
+    # Create a log directory for error dumps
+    log_dir = abspath(joinpath(dirname(dirname(dirname(@__FILE__))), "CirQuant-database/logs"))
+    if !isdir(log_dir)
+        @info "Creating log directory: $log_dir"
+        mkpath(log_dir)
     end
     
     # Process each dataset and year
@@ -42,38 +57,106 @@ function fetch_prodcom_data(years_range="1995-2023")
             url = "https://ec.europa.eu/eurostat/api/comext/dissemination/statistics/1.0/data/$dataset?time=$year"
             
             try
-                # Make the API request
-                response = HTTP.get(url)
+                # Make the API request with timeout and retries
+                response = nothing
+                retries = 3
                 
-                if response.status == 200
+                for attempt in 1:retries
+                    try
+                        response = HTTP.get(url, readtimeout=120, retries=2)
+                        break
+                    catch retry_err
+                        if attempt < retries
+                            @warn "Attempt $attempt failed, retrying in 5 seconds..." exception=retry_err
+                            sleep(5)
+                        else
+                            rethrow(retry_err)
+                        end
+                    end
+                end
+                
+                if response !== nothing && response.status == 200
                     # Parse JSON
                     data = JSON3.read(response.body)
                     
                     # Convert to DataFrame
+                    start_time = time()
                     df = process_eurostat_data(data, dataset, year)
+                    processing_time = round(time() - start_time, digits=2)
                     
                     # Save to DuckDB
                     table_name = "prodcom_$(replace(dataset, "-" => "_"))_$year"
                     if !isempty(df)
                         try
-                            write_large_duckdb_table!(df, db_path, table_name)
-                            @info "Saved $(nrow(df)) rows to table $table_name"
+                            # Record row count for statistics
+                            stats[:rows_processed] += nrow(df)
+                            
+                            # Write to database
+                            @info "Writing $(nrow(df)) rows to database (processed in $processing_time seconds)"
+                            success = write_large_duckdb_table!(df, db_path, table_name)
+                            
+                            if success
+                                @info "✓ Successfully saved data to table $table_name"
+                                stats[:successful] += 1
+                            else
+                                # If main write failed but data was saved to backup
+                                @warn "Data saved to backup file, but not to main database"
+                                stats[:failed] += 1
+                                
+                                # Save problematic dataframe for inspection
+                                error_file = joinpath(log_dir, "error_$(dataset)_$(year)_$(round(Int, time())).csv")
+                                try
+                                    CSV.write(error_file, df[1:min(1000, nrow(df)), :])
+                                    @info "Saved sample of problematic data to $error_file"
+                                catch csv_err
+                                    @warn "Failed to save error sample" exception=csv_err
+                                end
+                            end
                         catch db_error
                             @error "Failed to write to DuckDB" exception=db_error table=table_name
+                            stats[:failed] += 1
                         end
                     else
                         @warn "No data to save for $dataset, year $year"
+                        stats[:failed] += 1
                     end
                 else
-                    @error "HTTP error: status $(response.status)"
+                    status = response !== nothing ? response.status : "no response"
+                    @error "HTTP error: status $status for $dataset, year $year"
+                    stats[:failed] += 1
                 end
             catch e
                 @error "Error processing $dataset for year $year" exception=e
+                stats[:failed] += 1
+                
+                # Create an error log with details
+                error_log = joinpath(log_dir, "error_$(dataset)_$(year)_$(round(Int, time())).txt")
+                try
+                    open(error_log, "w") do f
+                        println(f, "Error processing $dataset for year $year")
+                        println(f, "URL: $url")
+                        println(f, "Exception: $e")
+                        println(f, "Stacktrace:")
+                        for (i, frame) in enumerate(stacktrace())
+                            println(f, "  [$i] $frame")
+                        end
+                    end
+                    @info "Error details saved to $error_log"
+                catch log_err
+                    @warn "Failed to save error log" exception=log_err
+                end
             end
         end
     end
     
-    @info "Completed PRODCOM data fetching"
+    # Report final statistics
+    @info "PRODCOM data fetching completed:"
+    @info "  Total datasets: $(stats[:total_datasets])"
+    @info "  Successfully processed: $(stats[:successful]) ($(round(stats[:successful]/stats[:total_datasets]*100, digits=1))%)"
+    @info "  Failed: $(stats[:failed])"
+    @info "  Total rows processed: $(stats[:rows_processed])"
+    
+    return stats
 end
 
 """
@@ -81,11 +164,30 @@ end
 
 Process Eurostat API JSON response into a properly structured DataFrame.
 Maintains all dimensions as columns with one value per combination.
+
+Returns a DataFrame with the processed data. Each row represents a unique
+combination of dimension values, with values organized in columns.
+
+The processing has two stages:
+1. Initial extraction where each API value becomes one row
+2. Optional pivoting where certain dimensions (like units) become columns
 """
 function process_eurostat_data(data, dataset, year)
+    # Safety check for malformed data
+    if !haskey(data, :dimension) || !haskey(data, :value)
+        @error "Malformed API response: missing dimension or value keys"
+        return DataFrame()
+    end
+    
     # Extract dimensions and values
     dimensions = data.dimension
     values = data.value
+    
+    # Safety check for empty data
+    if isempty(values)
+        @warn "Empty dataset received from API for $dataset, year $year"
+        return DataFrame()
+    end
     
     # Count total values for verification
     value_count = length(values)
@@ -193,7 +295,15 @@ function process_eurostat_data(data, dataset, year)
     end
     
     # Second-stage processing: Pivot the dataframe to create a more analysis-friendly structure
+    # Pivot the dataframe to create a more analysis-friendly structure
     # Identify dimensions that should be used for column headers versus row identifiers
+    
+    # Check if pivoting would create a reasonable number of columns
+    # Skip pivoting for very large datasets - DuckDB has issues with too many columns
+    if nrow(raw_df) > 500000
+        @warn "Large dataset detected ($(nrow(raw_df)) rows) - skipping pivoting to avoid DuckDB issues"
+        return raw_df
+    end
     
     # Try to determine the best dimensions to pivot on
     # Typically 'unit' is used for column headers, but we should detect other measure dimensions
@@ -213,12 +323,12 @@ function process_eurostat_data(data, dataset, year)
     end
     
     # Choose dimensions with reasonable cardinality for pivoting (not too many unique values)
-    # This prevents explosion of columns
-    pivot_cols = [dim for (dim, count) in dimension_counts if count <= 20]
+    # This prevents explosion of columns - stricter limit to avoid DuckDB issues
+    pivot_cols = [dim for (dim, count) in dimension_counts if count <= 10]
     
     if isempty(pivot_cols)
         # If no suitable pivot columns found, try using just unit as fallback
-        if "unit" in available_pivot_cols
+        if "unit" in available_pivot_cols && dimension_counts["unit"] <= 15
             pivot_cols = ["unit"]
             @info "Using 'unit' dimension for pivoting"
         else
