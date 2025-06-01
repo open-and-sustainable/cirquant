@@ -89,7 +89,12 @@ function process_eurostat_data(data, dataset, year)
     
     # Count original values for data preservation verification
     original_value_count = length(values)
-    original_value_sum = sum(v -> typeof(v) <: Number ? v : 0, values(values))
+    original_value_sum = 0
+    for (_, v) in pairs(values)
+        if typeof(v) <: Number
+            original_value_sum += v
+        end
+    end
     @info "Original data contains $original_value_count values with numeric sum $original_value_sum"
     
     # Identify all dimension names and their possible values
@@ -195,8 +200,16 @@ function process_eurostat_data(data, dataset, year)
         # Add to the set of all column keys
         push!(all_column_keys, col_key)
         
-        # Store the value using the column key
-        grouped_data[row_key][col_key] = record["value"]
+        # Check if there's already a value for this combination (safety check)
+        if haskey(grouped_data[row_key], col_key)
+            @warn "Duplicate dimension combination detected!" row_key col_key existing=grouped_data[row_key][col_key] new=record["value"]
+            # If we need to preserve both values, we could store them in an array
+            # But for now, we'll keep the first value encountered to maintain backward compatibility
+            # If this warning appears frequently, consider modifying to store arrays of values
+        else
+            # Store the value using the column key
+            grouped_data[row_key][col_key] = record["value"]
+        end
     end
     
     # Create all possible value column names
@@ -257,6 +270,7 @@ function process_eurostat_data(data, dataset, year)
     # Verify data preservation
     reorganized_value_count = 0
     reorganized_value_sum = 0
+    duplicate_count = 0
     
     # Count all non-missing values in value columns
     for col_name in names(df)
@@ -271,17 +285,23 @@ function process_eurostat_data(data, dataset, year)
     end
     
     # Verify preservation
-    if reorganized_value_count == original_value_count
-        @info "✓ Data preservation verified: All $original_value_count values successfully preserved"
+    if reorganized_value_count + duplicate_count == original_value_count
+        if duplicate_count > 0
+            @info "✓ Data preservation verified: All $original_value_count values accounted for ($duplicate_count duplicates detected)"
+        else
+            @info "✓ Data preservation verified: All $original_value_count values successfully preserved (no duplicates)"
+        end
         
         # Additional numeric sum check
         if isapprox(reorganized_value_sum, original_value_sum)
             @info "✓ Sum verification passed: Original sum = $original_value_sum, Reorganized sum = $reorganized_value_sum"
         else
             @warn "⚠ Sum verification failed: Original sum = $original_value_sum, Reorganized sum = $reorganized_value_sum"
+            @info "  This may be due to duplicates where we kept the first value encountered"
         end
     else
-        @error "✗ Data preservation FAILED: Original=$original_value_count values, Reorganized=$reorganized_value_count values"
+        @error "✗ Data preservation FAILED: Original=$original_value_count values, Reorganized=$reorganized_value_count values, Duplicates=$duplicate_count"
+        @error "  Total accounted for: $(reorganized_value_count + duplicate_count)"
     end
     
     return df
