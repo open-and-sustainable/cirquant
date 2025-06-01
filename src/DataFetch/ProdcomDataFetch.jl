@@ -125,8 +125,13 @@ function process_eurostat_data(data, dataset, year)
         row[:data_source] = "Eurostat PRODCOM API"
         row[:original_key] = string(key)
         
-        # Add the actual value
-        row[:value] = value
+        # Add the actual value, handling special values
+        if value isa String && (value == ":C" || value == ":c" || value == ":" || value == "-")
+            row[:value] = missing
+            row[:original_value] = value  # Preserve original for reference
+        else
+            row[:value] = value
+        end
         
         # Parse the key to get dimension indices
         indices = try
@@ -169,6 +174,15 @@ function process_eurostat_data(data, dataset, year)
     # Convert to DataFrame
     raw_df = DataFrame(rows)
     
+    # Clean up any problematic columns for DuckDB compatibility
+    for col in names(raw_df)
+        # Handle columns with mixed types
+        if eltype(raw_df[!, col]) == Any
+            @info "Converting Any-type column $col to String for DuckDB compatibility"
+            raw_df[!, col] = [ismissing(x) ? missing : string(x) for x in raw_df[!, col]]
+        end
+    end
+    
     @info "Created raw dataframe with $(nrow(raw_df)) rows and $(ncol(raw_df)) columns"
     
     # Validate data preservation
@@ -179,15 +193,40 @@ function process_eurostat_data(data, dataset, year)
     end
     
     # Second-stage processing: Pivot the dataframe to create a more analysis-friendly structure
-    # We'll use the 'unit' dimension as column and keep all others as row identifiers
-    pivot_cols = ["unit"]  # Dimensions to use for column headers (typically unit/measure)
+    # Identify dimensions that should be used for column headers versus row identifiers
     
-    # Check if pivot columns exist in the dataframe
-    pivot_cols = filter(col -> Symbol(col) in propertynames(raw_df), pivot_cols)
+    # Try to determine the best dimensions to pivot on
+    # Typically 'unit' is used for column headers, but we should detect other measure dimensions
+    possible_pivot_cols = ["unit", "indic_bt"]  # Potential column dimensions
+    
+    # Check which potential pivot columns exist in the dataframe
+    available_pivot_cols = filter(col -> Symbol(col) in propertynames(raw_df), possible_pivot_cols)
+    
+    # Analyze cardinality of dimensions to make intelligent pivot decisions
+    dimension_counts = Dict()
+    for dim in available_pivot_cols
+        if Symbol(dim) in propertynames(raw_df)
+            unique_values = unique(filter(!ismissing, raw_df[!, Symbol(dim)]))
+            dimension_counts[dim] = length(unique_values)
+            @info "Dimension '$dim' has $(length(unique_values)) unique values"
+        end
+    end
+    
+    # Choose dimensions with reasonable cardinality for pivoting (not too many unique values)
+    # This prevents explosion of columns
+    pivot_cols = [dim for (dim, count) in dimension_counts if count <= 20]
     
     if isempty(pivot_cols)
-        @info "No pivoting performed - all dimensions kept as rows"
-        return raw_df
+        # If no suitable pivot columns found, try using just unit as fallback
+        if "unit" in available_pivot_cols
+            pivot_cols = ["unit"]
+            @info "Using 'unit' dimension for pivoting"
+        else
+            @info "No suitable dimensions for pivoting - all dimensions kept as rows"
+            return raw_df
+        end
+    else
+        @info "Selected pivot dimensions: $(join(pivot_cols, ", "))"
     end
     
     # Identify row dimensions (all except pivot columns and value/metadata columns)
@@ -200,12 +239,27 @@ function process_eurostat_data(data, dataset, year)
     
     # Group by row dimensions
     grouped = Dict()
+    row_count = 0
+    
+    # Track unique values for each pivot dimension to create consistent column names
+    pivot_values = Dict(dim => Set{String}() for dim in pivot_cols)
+    
     for row in eachrow(raw_df)
         # Create a key from row dimensions
         row_key = Tuple(row[dim] for dim in row_dims)
         
-        # Create a column key from pivot dimensions
-        col_key = Tuple(row[Symbol(dim)] for dim in pivot_cols)
+        # Create a column key from pivot dimensions, handling missing values
+        col_key_parts = []
+        for dim in pivot_cols
+            val = row[Symbol(dim)]
+            # Replace missing or empty values with "unknown" for column naming
+            push!(col_key_parts, ismissing(val) || val == "" ? "unknown" : string(val))
+            # Track this value for the dimension
+            if !ismissing(val) && val != ""
+                push!(pivot_values[dim], string(val))
+            end
+        end
+        col_key = Tuple(col_key_parts)
         
         # Initialize this group if it doesn't exist
         if !haskey(grouped, row_key)
@@ -217,15 +271,38 @@ function process_eurostat_data(data, dataset, year)
                 :fetch_date => row.fetch_date,
                 :data_source => row.data_source
             )
+            row_count += 1
         end
         
+        # Create a descriptive column name with dimension names included
+        col_parts = ["$(dim)_$(col_key[i])" for (i, dim) in enumerate(pivot_cols)]
+        col_name = join(col_parts, "_")
+        
         # Store the value with its column key
-        col_name = join(col_key, "_")
-        if haskey(grouped[row_key], col_name) && grouped[row_key][col_name] != row.value
-            @warn "Duplicate value found for dimension combination" row_key col_key existing=grouped[row_key][col_name] new=row.value
+        # Only store non-missing values
+        if !ismissing(row.value)
+            if haskey(grouped[row_key], col_name) && grouped[row_key][col_name] != row.value
+                @warn "Duplicate value found for dimension combination" row_key col_key existing=grouped[row_key][col_name] new=row.value
+            end
+            grouped[row_key][col_name] = row.value
         end
-        grouped[row_key][col_name] = row.value
     end
+    
+    @info "Created $row_count grouped rows from $(nrow(raw_df)) original rows"
+    for (dim, values) in pivot_values
+        @info "Pivot dimension '$dim' has $(length(values)) values: $(join(collect(values)[1:min(5, length(values))], ", "))$(length(values) > 5 ? "..." : "")"
+    end
+    
+    # Find all possible column keys to ensure all rows have the same columns
+    all_column_keys = Set{String}()
+    for (_, data) in grouped
+        for col_key in keys(data)
+            if col_key != :metadata
+                push!(all_column_keys, col_key)
+            end
+        end
+    end
+    @info "Found $(length(all_column_keys)) unique value columns after pivoting"
     
     # Convert grouped data to rows
     pivoted_rows = []
@@ -244,10 +321,20 @@ function process_eurostat_data(data, dataset, year)
             pivoted_row[dim] = row_key[i]
         end
         
-        # Add values for each column key
+        # Initialize all possible columns with missing values
+        for col_key in all_column_keys
+            pivoted_row[Symbol("value_$(col_key)")] = missing
+        end
+        
+        # Add the values this row actually has
         for (col_key, val) in data
             if col_key != :metadata
-                pivoted_row[Symbol("value_$(col_key)")] = val
+                # Clean up problematic values for DuckDB
+                if val isa String && (val == ":C" || val == ":c" || val == ":" || val == "-")
+                    pivoted_row[Symbol("value_$(col_key)")] = missing
+                else
+                    pivoted_row[Symbol("value_$(col_key)")] = val
+                end
             end
         end
         
@@ -268,10 +355,25 @@ function process_eurostat_data(data, dataset, year)
     value_cols = [col for col in propertynames(pivoted_df) if startswith(string(col), "value_")]
     total_values = sum(count(!ismissing, pivoted_df[!, col]) for col in value_cols)
     
-    if total_values == value_count
-        @info "✓ Data fully preserved after pivoting: $value_count values in original data, $total_values values in pivoted dataframe"
+    # Count special values that were converted to missing
+    special_value_count = count(rows) do row
+        haskey(row, :original_value) && !ismissing(row[:original_value])
+    end
+    
+    if total_values + special_value_count >= value_count
+        @info "✓ Data fully preserved after pivoting: $value_count values in original data, $total_values numeric values + $special_value_count special values in pivoted dataframe"
     else
-        @warn "Possible data discrepancy after pivoting: $value_count values in original data, $total_values values in pivoted dataframe"
+        @warn "Possible data discrepancy after pivoting: $value_count values in original data, $total_values values + $special_value_count special values in pivoted dataframe"
+    end
+    
+    # Ensure dataframe is compatible with DuckDB
+    @info "Preparing dataframe for DuckDB storage"
+    for col in names(pivoted_df)
+        col_type = eltype(pivoted_df[!, col])
+        if col_type == Any
+            # Convert Any columns to strings for DuckDB compatibility
+            pivoted_df[!, col] = [ismissing(x) ? missing : string(x) for x in pivoted_df[!, col]]
+        end
     end
     
     return pivoted_df
