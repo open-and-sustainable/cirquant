@@ -87,33 +87,59 @@ function fetch_prodcom_data(years_range="1995-2023")
                     # Save to DuckDB
                     table_name = "prodcom_$(replace(dataset, "-" => "_"))_$year"
                     if !isempty(df)
+                        # Record row count for statistics
+                        stats[:rows_processed] += nrow(df)
+                        
+                        # Write to database
+                        @info "Writing $(nrow(df)) rows to database (processed in $processing_time seconds)"
+                        
+                        # Try writing with error handling
+                        success = false
                         try
-                            # Record row count for statistics
-                            stats[:rows_processed] += nrow(df)
+                            # Handle both possible outcomes (success or error)
+                            success = try
+                                # Try to write to DuckDB but catch any error
+                                write_large_duckdb_table!(df, db_path, table_name)
+                            catch db_error
+                                @error "Failed to write to DuckDB through main function" exception=db_error table=table_name
+                                # Signal failure but don't propagate error
+                                false
+                            end
                             
-                            # Write to database
-                            @info "Writing $(nrow(df)) rows to database (processed in $processing_time seconds)"
-                            success = write_large_duckdb_table!(df, db_path, table_name)
-                            
-                            if success
+                            if success === true  # Explicit comparison to ensure boolean true
                                 @info "✓ Successfully saved data to table $table_name"
                                 stats[:successful] += 1
                             else
-                                # If main write failed but data was saved to backup
-                                @warn "Data saved to backup file, but not to main database"
+                                # Manual fallback if automatic ones didn't work
+                                @warn "Automatic methods failed, trying emergency backup"
                                 stats[:failed] += 1
                                 
-                                # Save problematic dataframe for inspection
-                                error_file = joinpath(log_dir, "error_$(dataset)_$(year)_$(round(Int, time())).csv")
+                                # Save problematic dataframe for inspection and backup
+                                backup_dir = joinpath(log_dir, "backups")
+                                mkpath(backup_dir)
+                                backup_file = joinpath(backup_dir, "backup_$(dataset)_$(year)_$(round(Int, time())).csv")
+                                
                                 try
-                                    CSV.write(error_file, df[1:min(1000, nrow(df)), :])
-                                    @info "Saved sample of problematic data to $error_file"
+                                    # Save complete dataset as backup
+                                    @info "Saving emergency backup to $backup_file"
+                                    CSV.write(backup_file, df)
+                                    @info "✓ Successfully saved backup data"
                                 catch csv_err
-                                    @warn "Failed to save error sample" exception=csv_err
+                                    @warn "Failed to save backup data" exception=csv_err
+                                    
+                                    # Last resort: try to save a small sample
+                                    sample_file = joinpath(log_dir, "sample_$(dataset)_$(year)_$(round(Int, time())).csv")
+                                    try
+                                        CSV.write(sample_file, df[1:min(1000, nrow(df)), :])
+                                        @info "Saved sample of problematic data to $sample_file"
+                                    catch sample_err
+                                        @error "All backup methods failed" exception=sample_err
+                                    end
                                 end
                             end
-                        catch db_error
-                            @error "Failed to write to DuckDB" exception=db_error table=table_name
+                        catch outer_err
+                            # Catch any unexpected errors to prevent the entire process from failing
+                            @error "Unexpected error in database writing process" exception=outer_err
                             stats[:failed] += 1
                         end
                     else
@@ -295,15 +321,35 @@ function process_eurostat_data(data, dataset, year)
     end
     
     # Second-stage processing: Pivot the dataframe to create a more analysis-friendly structure
-    # Pivot the dataframe to create a more analysis-friendly structure
-    # Identify dimensions that should be used for column headers versus row identifiers
+        # Pivot the dataframe to create a more analysis-friendly structure
+        # Identify dimensions that should be used for column headers versus row identifiers
     
-    # Check if pivoting would create a reasonable number of columns
-    # Skip pivoting for very large datasets - DuckDB has issues with too many columns
-    if nrow(raw_df) > 500000
-        @warn "Large dataset detected ($(nrow(raw_df)) rows) - skipping pivoting to avoid DuckDB issues"
-        return raw_df
-    end
+        # For DuckDB compatibility, check if the dataframe has problematic types
+        for col in names(raw_df)
+            if eltype(raw_df[!, col]) == Any
+                # Convert Any columns to String to avoid DuckDB serialization issues
+                @info "Converting Any-type column $col to String for DuckDB compatibility"
+                raw_df[!, col] = [ismissing(x) ? missing : string(x) for x in raw_df[!, col]]
+            end
+        
+            # Handle special string values that may cause DuckDB problems
+            if eltype(raw_df[!, col]) >: String
+                # Replace problematic values with missing
+                mask = [x isa String && (x == ":C" || x == ":c" || x == ":" || x == "-" || 
+                        x == "null" || x == "NULL" || x == "NaN" || x == "Inf" || x == "-Inf") for x in raw_df[!, col]]
+                if any(mask)
+                    @info "Replacing $(sum(mask)) special values in column $col with missing"
+                    raw_df[mask, col] .= missing
+                end
+            end
+        end
+    
+        # Check if pivoting would create a reasonable number of columns
+        # Skip pivoting for very large datasets - DuckDB has issues with too many columns
+        if nrow(raw_df) > 100000  # Lower threshold to avoid DuckDB issues
+            @warn "Large dataset detected ($(nrow(raw_df)) rows) - skipping pivoting to avoid DuckDB issues"
+            return raw_df
+        end
     
     # Try to determine the best dimensions to pivot on
     # Typically 'unit' is used for column headers, but we should detect other measure dimensions
@@ -324,11 +370,11 @@ function process_eurostat_data(data, dataset, year)
     
     # Choose dimensions with reasonable cardinality for pivoting (not too many unique values)
     # This prevents explosion of columns - stricter limit to avoid DuckDB issues
-    pivot_cols = [dim for (dim, count) in dimension_counts if count <= 10]
+    pivot_cols = [dim for (dim, count) in dimension_counts if count <= 5]  # Stricter limit
     
     if isempty(pivot_cols)
         # If no suitable pivot columns found, try using just unit as fallback
-        if "unit" in available_pivot_cols && dimension_counts["unit"] <= 15
+        if "unit" in available_pivot_cols && dimension_counts["unit"] <= 8  # Stricter limit
             pivot_cols = ["unit"]
             @info "Using 'unit' dimension for pivoting"
         else
