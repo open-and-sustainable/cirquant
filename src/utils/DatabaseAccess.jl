@@ -4,7 +4,7 @@ using DuckDB, DBInterface
 using DataFrames, CSV
 import Dates: Date, DateTime
 
-export write_duckdb_table!, write_large_duckdb_table!, executePRQL
+export write_duckdb_table!, write_large_duckdb_table!, executePRQL, recreate_duckdb_database
 
 # --- helpers ---------------------------------------------------------------
 
@@ -330,6 +330,58 @@ write_duckdb_table!(df, db, table) = (con = DuckDB.DB(db);
 create_and_load_table_directly!(df, con, table);
 DBInterface.close!(con))
 
+"""
+    recreate_duckdb_database(db_path, backup_suffix="_corrupted")
+
+Handles a corrupted DuckDB database by:
+1. Renaming the existing (possibly corrupted) database file
+2. Creating a fresh, empty database file at the original path
+
+Returns a tuple (success::Bool, backup_path::String)
+"""
+function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
+    if !isfile(db_path)
+        @info "No existing database found at $db_path, will create new one"
+        # Create parent directory if it doesn't exist
+        mkpath(dirname(db_path))
+        return (true, "")
+    end
+    
+    # Backup the existing database
+    backup_path = "$(db_path)$(backup_suffix)_$(round(Int, time()))"
+    @info "Backing up existing database to $backup_path"
+    
+    try
+        # Rename existing database to backup name
+        mv(db_path, backup_path)
+        @info "Successfully backed up database"
+        
+        # Try to create a fresh database
+        @info "Creating fresh database at $db_path"
+        con = DuckDB.DB(db_path)
+        # Test query to ensure it's working
+        DBInterface.execute(con, "CREATE TABLE test_table (id INTEGER)")
+        DBInterface.execute(con, "DROP TABLE test_table")
+        DBInterface.close!(con)
+        
+        @info "Successfully created fresh database"
+        return (true, backup_path)
+    catch e
+        @error "Failed to recreate database" exception=e
+        # Try to restore original if backup succeeded but create failed
+        if !isfile(db_path) && isfile(backup_path)
+            @warn "Attempting to restore original database"
+            try
+                mv(backup_path, db_path)
+                @info "Restored original database"
+            catch restore_err
+                @error "Failed to restore original database" exception=restore_err
+            end
+        end
+        return (false, backup_path)
+    end
+end
+
 function write_large_duckdb_table!(df, db, table)
     if isempty(df)
         @warn "Skipping write to DuckDB - dataframe is empty"
@@ -348,6 +400,7 @@ function write_large_duckdb_table!(df, db, table)
     ]
     
     success = false
+    db_recreated = false
     
     for (method_id, method_name, method_func) in methods
         @info "Trying to write data using $method_name"
@@ -362,6 +415,37 @@ function write_large_duckdb_table!(df, db, table)
             break  # Exit the loop on success
         catch e
             @warn "Failed to write using $method_name" exception=e
+            
+            # Check if this looks like a corrupted database error
+            error_str = string(e)
+            if !db_recreated && (
+                occursin("No more data remaining in MetadataReader", error_str) ||
+                occursin("Database file is corrupt", error_str) ||
+                occursin("Catalog Error", error_str)
+            )
+                @warn "Database may be corrupted, attempting to recreate it"
+                try
+                    # Close connection if it exists
+                    if @isdefined con
+                        DBInterface.close!(con)
+                    end
+                    # Recreate the database
+                    recreate_success, backup_path = recreate_duckdb_database(db)
+                    if recreate_success
+                        db_recreated = true
+                        @info "Database recreated successfully, original backed up to $backup_path"
+                        # Try this method again with the fresh database
+                        con = DuckDB.DB(db)
+                        method_func(df, con, table)
+                        DBInterface.close!(con)
+                        @info "Successfully wrote data to table '$table' after database recreation"
+                        success = true
+                        break
+                    end
+                catch recreate_err
+                    @error "Failed to recreate database" exception=recreate_err
+                end
+            end
             
             # Make sure connection is closed even on error
             try

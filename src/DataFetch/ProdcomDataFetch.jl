@@ -1,7 +1,7 @@
 module ProdcomDataFetch
 
 using HTTP, JSON3, DataFrames, Dates, DuckDB
-using ..DatabaseAccess: write_large_duckdb_table!
+using ..DatabaseAccess: write_large_duckdb_table!, recreate_duckdb_database
 
 export fetch_prodcom_data
 
@@ -44,6 +44,32 @@ function fetch_prodcom_data(years_range="1995-2023")
     if !isdir(log_dir)
         @info "Creating log directory: $log_dir"
         mkpath(log_dir)
+    end
+    
+    # Check if database exists and try to validate it
+    if isfile(db_path)
+        @info "Checking database integrity: $db_path"
+        db_valid = try
+            con = DuckDB.DB(db_path)
+            # Test query to check if database is accessible
+            DuckDB.query(con, "SELECT 1")
+            DBInterface.close!(con)
+            true
+        catch e
+            @warn "Database appears to be corrupted or inaccessible" exception=e
+            false
+        end
+        
+        # If database seems corrupted, recreate it
+        if !db_valid
+            @info "Attempting to recreate corrupted database"
+            recreate_success, backup_path = recreate_duckdb_database(db_path)
+            if recreate_success
+                @info "Successfully recreated database. Original backed up to $backup_path"
+            else
+                @error "Failed to recreate database. Data will be saved to backup files instead."
+            end
+        end
     end
     
     # Process each dataset and year
@@ -96,6 +122,25 @@ function fetch_prodcom_data(years_range="1995-2023")
                         # Try writing with error handling
                         success = false
                         try
+                            # Check if the database appears to be valid first
+                            db_valid = try
+                                con = DuckDB.DB(db_path)
+                                DuckDB.query(con, "SELECT 1")
+                                DBInterface.close!(con)
+                                true
+                            catch db_check_error
+                                @warn "Database seems inaccessible, attempting recreation" exception=db_check_error
+                                false
+                            end
+                            
+                            # Recreate the database if it appears corrupted
+                            if !db_valid
+                                recreate_success, backup_path = recreate_duckdb_database(db_path)
+                                if recreate_success
+                                    @info "Database recreated successfully before writing data"
+                                end
+                            end
+                            
                             # Handle both possible outcomes (success or error)
                             success = try
                                 # Try to write to DuckDB but catch any error
