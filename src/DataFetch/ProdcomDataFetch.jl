@@ -79,159 +79,43 @@ end
 """
     process_eurostat_data(data, dataset, year)
 
-Process Eurostat API JSON response into a DataFrame with properly organized rows.
-Each row contains a complete set of dimension values and their associated data.
+Process Eurostat API JSON response into a properly structured DataFrame.
+Maintains all dimensions as columns with one value per combination.
 """
 function process_eurostat_data(data, dataset, year)
     # Extract dimensions and values
     dimensions = data.dimension
     values = data.value
     
-    # Count original values for data preservation verification
-    original_value_count = length(values)
-    original_value_sum = 0
-    for (_, v) in pairs(values)
-        if typeof(v) <: Number
-            original_value_sum += v
-        end
-    end
-    @info "Original data contains $original_value_count values with numeric sum $original_value_sum"
+    # Count total values for verification
+    value_count = length(values)
+    @info "Processing $value_count values from Eurostat API"
     
-    # Identify all dimension names and their possible values
-    dim_names = []
-    dim_maps = Dict()
+    # Extract dimension information
+    dimension_info = Dict{String, Dict{Int, String}}()
+    dimension_names = String[]
     
     for (dim_name, dim_data) in pairs(dimensions)
+        dim_str = string(dim_name)
+        push!(dimension_names, dim_str)
+        
+        # Create index mapping for this dimension
         if haskey(dim_data, :category) && haskey(dim_data.category, :index)
-            push!(dim_names, dim_name)
-            
-            # Create a map from index to label for this dimension
-            index_to_label = Dict()
+            dimension_info[dim_str] = Dict{Int, String}()
             for (cat_label, cat_idx) in pairs(dim_data.category.index)
-                index_to_label[cat_idx + 1] = string(cat_label)  # +1 to convert from 0-based to 1-based
-            end
-            dim_maps[dim_name] = index_to_label
-        end
-    end
-    
-    # Parse all keys to understand the dimension values
-    value_map = Dict{String, Dict{String, Any}}()  # Will hold organized data with meaningful dimensions
-    dimension_values = Dict{String, Set{String}}()  # Track all possible values for each dimension
-    
-    # Track how many items we've processed
-    count = 0
-    total = length(values)
-    
-    # Process each value and organize dimensions
-    for (key, value) in pairs(values)
-        key_str = string(key)
-        indices = parse.(Int, split(key_str, ":"))
-        
-        # Create a record with dimension names mapped to their values
-        record = Dict{String, Any}()
-        
-        # Map indices to dimension values
-        for (i, dim_name) in enumerate(dim_names)
-            if i <= length(indices)
-                idx = indices[i]
-                if haskey(dim_maps[dim_name], idx)
-                    dim_value = dim_maps[dim_name][idx]
-                    record[string(dim_name)] = dim_value
-                    
-                    # Track all values for this dimension
-                    if !haskey(dimension_values, string(dim_name))
-                        dimension_values[string(dim_name)] = Set{String}()
-                    end
-                    push!(dimension_values[string(dim_name)], dim_value)
-                else
-                    record[string(dim_name)] = "unknown"
-                end
-            else
-                record[string(dim_name)] = "unknown"
+                # Convert from 0-based to 1-based indexing
+                idx = Int(cat_idx) + 1
+                dimension_info[dim_str][idx] = string(cat_label)
             end
         end
-        
-        # Store the record with its value
-        record["value"] = value
-        
-        # We create a signature that uniquely identifies this data point
-        value_map[key_str] = record
-        
-        # Show progress periodically
-        count += 1
-        if count % 10000 == 0
-            @info "Processed $count/$total items ($(round(count/total*100, digits=1))%)"
-        end
     end
     
-    # Determine which dimensions to use for row grouping and which for columns
-    # This is a heuristic and may need to be adjusted for different datasets
-    
-    # We want to maintain a good level of detail in our rows
-    # Use most dimensions for rows to avoid excessive aggregation
-    # Only use unit-like dimensions for columns (typically)
-    
-    # By default, only use 'unit' for columns, keep all other dimensions for rows
-    # This prevents over-aggregation of data
-    col_dimension_names = ["unit"]
-    row_dimensions = [string(dim) for dim in dim_names if !in(string(dim), col_dimension_names)]
-    col_dimensions = col_dimension_names
-    
-    # Group data by row dimensions
-    grouped_data = Dict()
-    
-    # Track all possible column keys
-    all_column_keys = Set()
-    
-    for (key_str, record) in value_map
-        # Create a row key based on row dimensions
-        row_key_parts = [get(record, dim, "unknown") for dim in row_dimensions]
-        row_key = Tuple(row_key_parts)
-        
-        # Initialize this row group if it doesn't exist
-        if !haskey(grouped_data, row_key)
-            grouped_data[row_key] = Dict()
-        end
-        
-        # Create a column key based on column dimensions
-        col_key_parts = [get(record, dim, "unknown") for dim in col_dimensions]
-        col_key = Tuple(col_key_parts)
-        
-        # Add to the set of all column keys
-        push!(all_column_keys, col_key)
-        
-        # Check if there's already a value for this combination (safety check)
-        if haskey(grouped_data[row_key], col_key)
-            @warn "Duplicate dimension combination detected!" row_key col_key existing=grouped_data[row_key][col_key] new=record["value"]
-            # If we need to preserve both values, we could store them in an array
-            # But for now, we'll keep the first value encountered to maintain backward compatibility
-            # If this warning appears frequently, consider modifying to store arrays of values
-        else
-            # Store the value using the column key
-            grouped_data[row_key][col_key] = record["value"]
-        end
-    end
-    
-    # Create all possible value column names
-    value_column_names = Dict()
-    for col_key in all_column_keys
-        if isempty(col_dimensions)
-            # If we don't have any column dimensions, just use "value"
-            column_name = Symbol("value")
-        else
-            # Create a descriptive column name from the column dimensions
-            col_parts = ["$(dim)_$(col_key[i])" for (i, dim) in enumerate(col_dimensions)]
-            col_name = join(col_parts, "_")
-            column_name = Symbol("value_$(col_name)")
-        end
-        value_column_names[col_key] = column_name
-    end
-    
-    # Create rows from the grouped data
+    # Process each value directly to rows (no intermediate grouping)
     rows = []
+    processed = 0
     
-    for (row_key, col_values) in grouped_data
-        # Create a new row
+    for (key, value) in pairs(values)
+        # Create a new row for this observation
         row = Dict{Symbol, Any}()
         
         # Add metadata
@@ -239,72 +123,158 @@ function process_eurostat_data(data, dataset, year)
         row[:year] = year
         row[:fetch_date] = now()
         row[:data_source] = "Eurostat PRODCOM API"
+        row[:original_key] = string(key)
         
-        # Add row dimension values
-        for (i, dim) in enumerate(row_dimensions)
-            row[Symbol(dim)] = row_key[i]
+        # Add the actual value
+        row[:value] = value
+        
+        # Parse the key to get dimension indices
+        indices = try
+            parse.(Int, split(string(key), ":"))
+        catch e
+            @warn "Failed to parse key: $key" exception=e
+            continue  # Skip this value if key can't be parsed
         end
         
-        # Initialize all possible value columns with missing values
-        for (col_key, column_name) in value_column_names
-            row[column_name] = missing
-        end
-        
-        # Add the actual values this row has
-        for (col_key, value) in col_values
-            column_name = value_column_names[col_key]
-            row[column_name] = value
+        # Map indices to dimension values
+        for (i, dim_name) in enumerate(dimension_names)
+            if i <= length(indices) && haskey(dimension_info, dim_name)
+                idx = indices[i]
+                # Get the dimension value, or use a placeholder if unknown
+                if haskey(dimension_info[dim_name], idx)
+                    row[Symbol(dim_name)] = dimension_info[dim_name][idx]
+                else
+                    row[Symbol(dim_name)] = "unknown_$(idx)"
+                end
+            else
+                # Dimension not found or index out of range
+                row[Symbol(dim_name)] = "missing"
+            end
         end
         
         push!(rows, row)
+        
+        # Track progress
+        processed += 1
+        if processed % 10000 == 0
+            @info "Processed $processed/$value_count values ($(round(processed/value_count*100, digits=1))%)"
+        end
     end
     
-    # Return empty DataFrame if no rows
     if isempty(rows)
+        @warn "No data processed for $dataset, year $year"
         return DataFrame()
     end
     
     # Convert to DataFrame
-    df = DataFrame(rows)
+    raw_df = DataFrame(rows)
     
-    # Verify data preservation
-    reorganized_value_count = 0
-    reorganized_value_sum = 0
-    duplicate_count = 0
+    @info "Created raw dataframe with $(nrow(raw_df)) rows and $(ncol(raw_df)) columns"
     
-    # Count all non-missing values in value columns
-    for col_name in names(df)
-        if startswith(string(col_name), "value_") || col_name == :value
-            for val in df[!, col_name]
-                if !ismissing(val) && typeof(val) <: Number
-                    reorganized_value_count += 1
-                    reorganized_value_sum += val
-                end
-            end
-        end
+    # Validate data preservation
+    if nrow(raw_df) == value_count
+        @info "✓ All values preserved: $value_count values in original data, $(nrow(raw_df)) rows in dataframe"
+    else
+        @error "Data loss detected: $value_count values in original data, but only $(nrow(raw_df)) rows in dataframe"
     end
     
-    # Verify preservation
-    if reorganized_value_count + duplicate_count == original_value_count
-        if duplicate_count > 0
-            @info "✓ Data preservation verified: All $original_value_count values accounted for ($duplicate_count duplicates detected)"
-        else
-            @info "✓ Data preservation verified: All $original_value_count values successfully preserved (no duplicates)"
+    # Second-stage processing: Pivot the dataframe to create a more analysis-friendly structure
+    # We'll use the 'unit' dimension as column and keep all others as row identifiers
+    pivot_cols = ["unit"]  # Dimensions to use for column headers (typically unit/measure)
+    
+    # Check if pivot columns exist in the dataframe
+    pivot_cols = filter(col -> Symbol(col) in propertynames(raw_df), pivot_cols)
+    
+    if isempty(pivot_cols)
+        @info "No pivoting performed - all dimensions kept as rows"
+        return raw_df
+    end
+    
+    # Identify row dimensions (all except pivot columns and value/metadata columns)
+    metadata_cols = [:dataset, :year, :fetch_date, :data_source, :original_key, :value]
+    row_dims = [col for col in propertynames(raw_df) 
+                if !(col in metadata_cols) && 
+                   !(string(col) in pivot_cols)]
+    
+    @info "Pivoting data: Using $(length(row_dims)) dimensions for rows, $(length(pivot_cols)) for columns"
+    
+    # Group by row dimensions
+    grouped = Dict()
+    for row in eachrow(raw_df)
+        # Create a key from row dimensions
+        row_key = Tuple(row[dim] for dim in row_dims)
+        
+        # Create a column key from pivot dimensions
+        col_key = Tuple(row[Symbol(dim)] for dim in pivot_cols)
+        
+        # Initialize this group if it doesn't exist
+        if !haskey(grouped, row_key)
+            grouped[row_key] = Dict()
+            # Add metadata
+            grouped[row_key][:metadata] = Dict(
+                :dataset => row.dataset,
+                :year => row.year,
+                :fetch_date => row.fetch_date,
+                :data_source => row.data_source
+            )
         end
         
-        # Additional numeric sum check
-        if isapprox(reorganized_value_sum, original_value_sum)
-            @info "✓ Sum verification passed: Original sum = $original_value_sum, Reorganized sum = $reorganized_value_sum"
-        else
-            @warn "⚠ Sum verification failed: Original sum = $original_value_sum, Reorganized sum = $reorganized_value_sum"
-            @info "  This may be due to duplicates where we kept the first value encountered"
+        # Store the value with its column key
+        col_name = join(col_key, "_")
+        if haskey(grouped[row_key], col_name) && grouped[row_key][col_name] != row.value
+            @warn "Duplicate value found for dimension combination" row_key col_key existing=grouped[row_key][col_name] new=row.value
         end
-    else
-        @error "✗ Data preservation FAILED: Original=$original_value_count values, Reorganized=$reorganized_value_count values, Duplicates=$duplicate_count"
-        @error "  Total accounted for: $(reorganized_value_count + duplicate_count)"
+        grouped[row_key][col_name] = row.value
     end
     
-    return df
+    # Convert grouped data to rows
+    pivoted_rows = []
+    
+    for (row_key, data) in grouped
+        # Create a new row
+        pivoted_row = Dict{Symbol, Any}()
+        
+        # Add metadata
+        for (k, v) in data[:metadata]
+            pivoted_row[k] = v
+        end
+        
+        # Add row dimensions
+        for (i, dim) in enumerate(row_dims)
+            pivoted_row[dim] = row_key[i]
+        end
+        
+        # Add values for each column key
+        for (col_key, val) in data
+            if col_key != :metadata
+                pivoted_row[Symbol("value_$(col_key)")] = val
+            end
+        end
+        
+        push!(pivoted_rows, pivoted_row)
+    end
+    
+    # Convert to DataFrame
+    if isempty(pivoted_rows)
+        @warn "No data after pivoting for $dataset, year $year"
+        return raw_df  # Return the original dataframe if pivoting failed
+    end
+    
+    pivoted_df = DataFrame(pivoted_rows)
+    
+    @info "Created pivoted dataframe with $(nrow(pivoted_df)) rows and $(ncol(pivoted_df)) columns"
+    
+    # Final data preservation check
+    value_cols = [col for col in propertynames(pivoted_df) if startswith(string(col), "value_")]
+    total_values = sum(count(!ismissing, pivoted_df[!, col]) for col in value_cols)
+    
+    if total_values == value_count
+        @info "✓ Data fully preserved after pivoting: $value_count values in original data, $total_values values in pivoted dataframe"
+    else
+        @warn "Possible data discrepancy after pivoting: $value_count values in original data, $total_values values in pivoted dataframe"
+    end
+    
+    return pivoted_df
 end
 
 end # module
