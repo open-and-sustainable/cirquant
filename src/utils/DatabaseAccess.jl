@@ -352,6 +352,58 @@ function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
     @info "Backing up existing database to $backup_path"
     
     try
+        # First try to extract existing table data to preserve it
+        @info "Attempting to preserve existing tables from database"
+        saved_tables = Dict{String, DataFrame}()
+        table_schemas = Dict{String, String}()
+        
+        # Try to open the existing database and list tables
+        try
+            existing_con = DuckDB.DB(db_path)
+            tables_result = DuckDB.query(existing_con, "SHOW TABLES")
+            
+            # Convert result to DataFrame
+            tables_df = DataFrame(tables_result)
+            
+            # For each table, try to extract schema and data
+            if size(tables_df, 1) > 0 && hasproperty(tables_df, :name)
+                for table_name in tables_df.name
+                    # Get table schema
+                    schema_query = "DESCRIBE $(table_name)"
+                    try
+                        schema_result = DuckDB.query(existing_con, schema_query)
+                        schema_df = DataFrame(schema_result)
+                        
+                        # Build CREATE TABLE statement from schema
+                        col_defs = []
+                        for row in eachrow(schema_df)
+                            col_name = row.column_name
+                            col_type = row.column_type
+                            push!(col_defs, "\"$(col_name)\" $(col_type)")
+                        end
+                        
+                        create_stmt = "CREATE TABLE \"$(table_name)\" ($(join(col_defs, ", ")))"
+                        table_schemas[table_name] = create_stmt
+                    catch schema_err
+                        @warn "Failed to extract schema for table $(table_name)" exception=schema_err
+                    end
+                    
+                    # Get table data
+                    try
+                        data_result = DuckDB.query(existing_con, "SELECT * FROM \"$(table_name)\"")
+                        saved_tables[table_name] = DataFrame(data_result)
+                        @info "Preserved table $(table_name) with $(nrow(saved_tables[table_name])) rows"
+                    catch data_err
+                        @warn "Failed to extract data from table $(table_name)" exception=data_err
+                    end
+                end
+            end
+            
+            DBInterface.close!(existing_con)
+        catch extract_err
+            @warn "Failed to extract data from existing database" exception=extract_err
+        end
+        
         # Rename existing database to backup name
         mv(db_path, backup_path)
         @info "Successfully backed up database"
@@ -359,12 +411,39 @@ function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
         # Try to create a fresh database
         @info "Creating fresh database at $db_path"
         con = DuckDB.DB(db_path)
+        
         # Test query to ensure it's working
         DBInterface.execute(con, "CREATE TABLE test_table (id INTEGER)")
         DBInterface.execute(con, "DROP TABLE test_table")
+        
+        # Restore tables from backup
+        for (table_name, create_stmt) in table_schemas
+            # Create table with original schema
+            DBInterface.execute(con, create_stmt)
+            
+            if haskey(saved_tables, table_name) && !isempty(saved_tables[table_name])
+                # Write data back to the table
+                temp_csv = tempname() * ".csv"
+                CSV.write(temp_csv, saved_tables[table_name])
+                
+                # Use proper path format for DuckDB COPY command
+                try
+                    copy_stmt = "COPY \"$(table_name)\" FROM '$(replace(temp_csv, "'" => "''"))' (FORMAT CSV, HEADER)"
+                    DBInterface.execute(con, copy_stmt)
+                catch copy_err
+                    @warn "Failed to copy data for table $(table_name)" exception=copy_err
+                finally
+                    # Clean up temp file
+                    rm(temp_csv, force=true)
+                end
+                
+                @info "Restored table $(table_name) with $(nrow(saved_tables[table_name])) rows"
+            end
+        end
+        
         DBInterface.close!(con)
         
-        @info "Successfully created fresh database"
+        @info "Successfully created fresh database with preserved tables"
         return (true, backup_path)
     catch e
         @error "Failed to recreate database" exception=e
