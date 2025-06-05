@@ -60,15 +60,12 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
             false
         end
 
-        # If database seems corrupted, recreate it
+        # If database seems corrupted, log a warning but continue without recreation
+        # to avoid losing existing data
         if !db_valid
-            @info "Attempting to recreate corrupted database"
-            recreate_success, backup_path = recreate_duckdb_database(db_path)
-            if recreate_success
-                @info "Successfully recreated database. Original backed up to $backup_path"
-            else
-                @error "Failed to recreate database. Data will be saved to backup files instead."
-            end
+            @warn "Database appears to have issues, but will continue without recreation to preserve existing tables"
+            @info "New data will be added to backup CSV files if database writes fail"
+            # Note: We intentionally avoid recreating the database to prevent data loss
         end
     end
 
@@ -122,24 +119,19 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
                         # Try writing with error handling
                         success = false
                         try
-                            # Check if the database appears to be valid first
+                            # Check if the database appears to be valid
                             db_valid = try
                                 con = DuckDB.DB(db_path)
                                 DuckDB.query(con, "SELECT 1")
                                 DBInterface.close!(con)
                                 true
                             catch db_check_error
-                                @warn "Database seems inaccessible, attempting recreation" exception = db_check_error
+                                @warn "Database seems inaccessible, but will continue without recreation" exception = db_check_error
+                                @info "Will attempt to write data with fallback to CSV backup if needed"
                                 false
                             end
-
-                            # Recreate the database if it appears corrupted
-                            if !db_valid
-                                recreate_success, backup_path = recreate_duckdb_database(db_path)
-                                if recreate_success
-                                    @info "Database recreated successfully before writing data"
-                                end
-                            end
+                            
+                            # We intentionally do NOT recreate the database here to preserve existing tables
 
                             # Handle both possible outcomes (success or error)
                             success = try
@@ -156,7 +148,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
                                 stats[:successful] += 1
                             else
                                 # Manual fallback if automatic ones didn't work
-                                @warn "Automatic methods failed, trying emergency backup"
+                                @warn "Automatic methods failed, saving to backup CSV"
                                 stats[:failed] += 1
 
                                 # Save problematic dataframe for inspection and backup
@@ -168,9 +160,10 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
                                     # Save complete dataset as backup
                                     @info "Saving emergency backup to $backup_file"
                                     CSV.write(backup_file, df)
-                                    @info "✓ Successfully saved backup data"
+                                    @info "✓ Successfully saved backup data to $backup_file"
+                                    @info "Data can be manually imported later with: COPY \"$(table_name)\" FROM '$(backup_file)' (FORMAT CSV, HEADER);"
                                 catch csv_err
-                                    @warn "Failed to save backup data" exception = csv_err
+                                    @warn "Failed to save complete backup data" exception = csv_err
 
                                     # Last resort: try to save a small sample
                                     sample_file = joinpath(log_dir, "sample_$(dataset)_$(year)_$(round(Int, time())).csv")
@@ -194,10 +187,12 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
                 else
                     status = response !== nothing ? response.status : "no response"
                     @error "HTTP error: status $status for $dataset, year $year"
+                    @info "Continuing with next year/dataset to avoid losing progress"
                     stats[:failed] += 1
                 end
             catch e
                 @error "Error processing $dataset for year $year" exception = e
+                @info "Continuing with next year/dataset to avoid losing progress"
                 stats[:failed] += 1
 
                 # Create an error log with details
