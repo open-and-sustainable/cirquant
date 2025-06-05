@@ -26,4 +26,3 @@ julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_
 
 echo
 echo "Process completed. Log saved to prodcom.log"
-echo "For additional options and examples, see ./fetch_example.jl"

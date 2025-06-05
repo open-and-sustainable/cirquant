@@ -21,36 +21,40 @@ in the DuckDB database at `db_path`.
 If the table does not exist it returns `missing, missing`.
 """
 function table_info(db_path::AbstractString, table_name::AbstractString)
-    con = DuckDB.DB(db_path)
+    db = DuckDB.DB(db_path)
+    con = DBInterface.connect(db)
     
-    # Check if table exists
-    result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.tables WHERE table_name = '$table_name'")
-    result_df = DataFrames.DataFrame(result)
-    exists = result_df[1, :n] > 0
-    
-    if !exists
+    try
+        # Check if table exists
+        result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.tables WHERE table_name = '$table_name'")
+        result_df = DataFrames.DataFrame(result)
+        exists = result_df[1, :n] > 0
+        
+        if !exists
+            return (missing, missing)
+        end
+        
+        # Get row count
+        result = DuckDB.query(con, "SELECT count(*) AS n FROM \"$table_name\"")
+        result_df = DataFrames.DataFrame(result)
+        rows = result_df[1, :n]
+        
+        # Get column count
+        result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.columns WHERE table_name = '$table_name'")
+        result_df = DataFrames.DataFrame(result)
+        cols = result_df[1, :n]
+        
+        return (rows, cols)
+    finally
         DBInterface.close!(con)
-        return (missing, missing)
+        DBInterface.close!(db)
     end
-    
-    # Get row count
-    result = DuckDB.query(con, "SELECT count(*) AS n FROM \"$table_name\"")
-    result_df = DataFrames.DataFrame(result)
-    rows = result_df[1, :n]
-    
-    # Get column count
-    result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.columns WHERE table_name = '$table_name'")
-    result_df = DataFrames.DataFrame(result)
-    cols = result_df[1, :n]
-    
-    DBInterface.close!(con)
-    return (rows, cols)
 end
 
 
 # --- core ------------------------------------------------------------------
 
-function create_table_with_types!(df::DataFrame, con::DuckDB.DB, table::String)
+function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::String)
     type_map = Dict(
         Int32 => "INTEGER", Int64 => "BIGINT",
         Float32 => "FLOAT", Float64 => "DOUBLE",
@@ -134,7 +138,7 @@ function create_and_load_table_directly!(df, con, table)
     create_table_with_types!(df, con, table)
     for row in eachrow(df)
         vals = join(sql_value.(row), ", ")
-        DBInterface.execute(con, "INSERT INTO $table VALUES ($vals)")
+        DBInterface.execute(con, "INSERT INTO \"$table\" VALUES ($vals)")
     end
 end
 
@@ -326,9 +330,11 @@ function create_and_load_table_direct!(df, con, table)
     return successful_inserts
 end
 
-write_duckdb_table!(df, db, table) = (con = DuckDB.DB(db);
+write_duckdb_table!(df, db, table) = (db_conn = DuckDB.DB(db);
+con = DBInterface.connect(db_conn);
 create_and_load_table_directly!(df, con, table);
-DBInterface.close!(con))
+DBInterface.close!(con);
+DBInterface.close!(db_conn))
 
 """
     recreate_duckdb_database(db_path, backup_suffix="_corrupted")
@@ -410,9 +416,11 @@ function write_large_duckdb_table!(df, db, table)
         
         # Only create the connection inside the try block
         try
-            con = DuckDB.DB(db)
+            db_conn = DuckDB.DB(db)
+            con = DBInterface.connect(db_conn)
             method_func(df, con, table)
             DBInterface.close!(con)
+            DBInterface.close!(db_conn)
             @info "Successfully wrote data to table '$table' using $method_name"
             success = true
             break  # Exit the loop on success
@@ -440,12 +448,22 @@ function write_large_duckdb_table!(df, db, table)
                         @warn "Failed to close connection" exception=close_err
                     end
                 end
+                if @isdefined db_conn
+                    try
+                        DBInterface.close!(db_conn)
+                    catch close_err
+                        @warn "Failed to close database" exception=close_err
+                    end
+                end
             end
             
             # Make sure connection is closed even on error
             try
                 if @isdefined con
                     DBInterface.close!(con)
+                end
+                if @isdefined db_conn
+                    DBInterface.close!(db_conn)
                 end
             catch close_err
                 @warn "Failed to close connection" exception=close_err
@@ -456,9 +474,11 @@ function write_large_duckdb_table!(df, db, table)
                 @info "Will try next method after failure"
                 # Prepare for next attempt by ensuring table doesn't exist
                 try 
-                    drop_con = DuckDB.DB(db)
+                    drop_db = DuckDB.DB(db)
+                    drop_con = DBInterface.connect(drop_db)
                     DBInterface.execute(drop_con, "DROP TABLE IF EXISTS \"$table\"")
                     DBInterface.close!(drop_con)
+                    DBInterface.close!(drop_db)
                 catch drop_err
                     @warn "Failed to drop table for retry" exception=drop_err
                 end
@@ -489,12 +509,14 @@ function write_large_duckdb_table!(df, db, table)
 end
 
 function executePRQL(dbpath, prqlpath)
-    con = DuckDB.DB(dbpath)
+    db = DuckDB.DB(dbpath)
+    con = DBInterface.connect(db)
     try
         DuckDB.execute(con, "LOAD 'prql'")
         DataFrame(DuckDB.query(con, read(prqlpath, String)))
     finally
         DBInterface.close!(con)
+        DBInterface.close!(db)
     end
 end
 
