@@ -195,17 +195,23 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
                 @info "Continuing with next year/dataset to avoid losing progress"
                 stats[:failed] += 1
 
-                # Create an error log with details
+                # Create an error log with details - use safer approach to avoid closure serialization issues
                 error_log = joinpath(log_dir, "error_$(dataset)_$(year)_$(round(Int, time())).txt")
                 try
+                    # Extract basic info before opening file to avoid closure issues
+                    error_type = string(typeof(e))
+                    error_msg = try
+                        sprint(showerror, e)
+                    catch
+                        "Error message could not be extracted"
+                    end
+                    
                     open(error_log, "w") do f
                         println(f, "Error processing $dataset for year $year")
                         println(f, "URL: $url")
-                        println(f, "Exception: $e")
-                        println(f, "Stacktrace:")
-                        for (i, frame) in enumerate(stacktrace())
-                            println(f, "  [$i] $frame")
-                        end
+                        println(f, "Exception Type: $error_type")
+                        println(f, "Exception Message: $error_msg")
+                        println(f, "Stacktrace: Available in Julia logs")
                     end
                     @info "Error details saved to $error_log"
                 catch log_err
@@ -338,18 +344,29 @@ function process_eurostat_data(data, dataset, year)
         row[:original_key] = string(key)
 
         # Add the actual value, handling special values
-        if value isa String && (value == ":C" || value == ":c" || value == ":" || value == "-")
+        try
+            if value isa String && (value == ":C" || value == ":c" || value == ":" || value == "-")
+                row[:value] = missing
+                row[:original_value] = string(value)  # Preserve original for reference
+            else
+                row[:value] = value
+                row[:original_value] = missing  # Ensure all rows have this key for DataFrame consistency
+            end
+        catch val_err
+            @warn "Error processing value for key $key in $dataset year $year" value = value exception = val_err
             row[:value] = missing
-            row[:original_value] = value  # Preserve original for reference
-        else
-            row[:value] = value
+            if value isa String
+                row[:original_value] = string(value)
+            else
+                row[:original_value] = missing
+            end
         end
 
         # Parse the key as a linear index in a multi-dimensional array
         key_int = try
             parse(Int, string(key))
         catch e
-            @warn "Failed to parse key: $key" exception = e
+            @warn "Failed to parse key: $key in $dataset year $year" exception = e
             continue  # Skip this value if key can't be parsed
         end
 
@@ -387,7 +404,13 @@ function process_eurostat_data(data, dataset, year)
     end
 
     # Convert to DataFrame
-    raw_df = DataFrame(rows)
+    local raw_df
+    try
+        raw_df = DataFrame(rows)
+    catch df_err
+        @error "Error creating DataFrame for $dataset year $year" exception = df_err
+        return DataFrame()
+    end
 
     # Clean up any problematic columns for DuckDB compatibility
     for col in names(raw_df)
@@ -598,9 +621,21 @@ function process_eurostat_data(data, dataset, year)
     value_cols = [col for col in propertynames(pivoted_df) if startswith(string(col), "value_")]
     total_values = sum(count(!ismissing, pivoted_df[!, col]) for col in value_cols)
 
-    # Count special values that were converted to missing
-    special_value_count = count(rows) do row
-        haskey(row, :original_value) && !ismissing(row[:original_value])
+    # Count special values that were converted to missing - make this more robust
+    special_value_count = 0
+    try
+        # Use a safer approach to avoid closure serialization issues
+        for row in rows
+            if isa(row, Dict) && haskey(row, :original_value)
+                orig_val = get(row, :original_value, nothing)
+                if !isnothing(orig_val) && !ismissing(orig_val)
+                    special_value_count += 1
+                end
+            end
+        end
+    catch count_err
+        @warn "Error counting special values in $dataset year $year, using 0" exception = count_err
+        special_value_count = 0
     end
 
     if total_values + special_value_count >= value_count
