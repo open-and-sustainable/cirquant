@@ -1,6 +1,6 @@
 module ProdcomDataFetch
 
-using HTTP, JSON3, DataFrames, Dates, DuckDB, CSV
+using HTTP, JSON3, DataFrames, Dates, DuckDB, CSV, ProdcomAPI
 using ..DatabaseAccess: write_large_duckdb_table!, recreate_duckdb_database
 
 export fetch_prodcom_data
@@ -130,7 +130,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
                                 @info "Will attempt to write data with fallback to CSV backup if needed"
                                 false
                             end
-                            
+
                             # We intentionally do NOT recreate the database here to preserve existing tables
 
                             # Handle both possible outcomes (success or error)
@@ -205,7 +205,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing)
                     catch
                         "Error message could not be extracted"
                     end
-                    
+
                     open(error_log, "w") do f
                         println(f, "Error processing $dataset for year $year")
                         println(f, "URL: $url")
@@ -248,10 +248,10 @@ function linear_index_to_nd_indices(idx, dimensions)
         @warn "Index $idx out of bounds for dimensions $dimensions"
         return fill(1, length(dimensions))  # Return default indices
     end
-    
+
     indices = Int[]
     remaining = idx - 1  # Convert to 0-based for calculation
-    
+
     # Column-major order (Julia standard)
     stride = 1
     for dim_size in dimensions
@@ -259,7 +259,7 @@ function linear_index_to_nd_indices(idx, dimensions)
         push!(indices, index)
         stride *= dim_size
     end
-    
+
     return indices
 end
 
@@ -309,11 +309,11 @@ function process_eurostat_data(data, dataset, year)
         # Create index mapping for this dimension
         if haskey(dim_data, :category) && haskey(dim_data.category, :index)
             dimension_info[dim_str] = Dict{Int,String}()
-            
+
             # Get dimension size (count of unique values)
             dim_size = length(dim_data.category.index)
             push!(dimension_sizes, dim_size)
-            
+
             for (cat_label, cat_idx) in pairs(dim_data.category.index)
                 # Convert from 0-based to 1-based indexing
                 idx = Int(cat_idx) + 1
@@ -324,7 +324,7 @@ function process_eurostat_data(data, dataset, year)
             push!(dimension_sizes, 1)
         end
     end
-    
+
     @info "Dimensions in order: $(join(dimension_names, ", "))"
     @info "Dimension sizes: $(join(dimension_sizes, ", "))"
 
