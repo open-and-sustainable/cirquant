@@ -22,17 +22,9 @@ function fetch_comext_data(years_range="1995-2023", custom_datasets=nothing)
         try
             available_datasets = ComextAPI.get_available_datasets()
             if nrow(available_datasets) > 0
-                # Filter out datasets that are known to have API issues
-                valid_datasets = filter(row -> !in(row.dataset_id, ["DS-045409"]), available_datasets)
-                if nrow(valid_datasets) > 0
-                    @info "Found $(nrow(valid_datasets)) potentially working datasets"
-                    valid_datasets.dataset_id
-                else
-                    @warn "All available datasets appear to have known issues"
-                    @info "Trying alternative Comext datasets from bulk download patterns"
-                    # Try some alternative dataset patterns that might work
-                    ["DS-016890", "DS-018995", "DS-041688"]  # Alternative trade datasets
-                end
+                # Use all available datasets without filtering
+                @info "Found $(nrow(available_datasets)) available datasets"
+                Vector(available_datasets.dataset_id)
             else
                 @warn "No datasets found from ComextAPI, trying alternative approaches"
                 # Try some common Comext dataset patterns
@@ -126,7 +118,7 @@ function fetch_comext_data(years_range="1995-2023", custom_datasets=nothing)
                 # Fetch data using ComextAPI with additional error context
                 @info "Attempting to fetch dataset $dataset for year $year..."
                 start_time = time()
-                
+
                 df = try
                     ComextAPI.fetch_comext_dataset(dataset, year)
                 catch fetch_error
@@ -148,15 +140,15 @@ function fetch_comext_data(years_range="1995-2023", custom_datasets=nothing)
                     end
                     rethrow(fetch_error)
                 end
-                
+
                 processing_time = round(time() - start_time, digits=2)
                 @info "Successfully fetched $(nrow(df)) rows in $processing_time seconds"
 
                 # Add metadata columns to match Prodcom structure
-                df[!, :dataset] = dataset
-                df[!, :year] = year
-                df[!, :fetch_date] = now()
-                df[!, :data_source] = "Eurostat COMEXT API"
+                df[!, :dataset] = fill(dataset, nrow(df))
+                df[!, :year] = fill(year, nrow(df))
+                df[!, :fetch_date] = fill(now(), nrow(df))
+                df[!, :data_source] = fill("Eurostat COMEXT API", nrow(df))
 
                 # Clean and process the dataframe for DuckDB compatibility
                 df = clean_comext_dataframe(df, dataset, year)
@@ -184,7 +176,7 @@ function fetch_comext_data(years_range="1995-2023", custom_datasets=nothing)
                             @info "Will attempt to write data with fallback to CSV backup if needed"
                             false
                         end
-                        
+
                         # Handle both possible outcomes (success or error)
                         success = try
                             # Try to write to DuckDB but catch any error
@@ -251,7 +243,7 @@ function fetch_comext_data(years_range="1995-2023", custom_datasets=nothing)
                     catch
                         "Error message could not be extracted"
                     end
-                    
+
                     open(error_log, "w") do f
                         println(f, "Error processing Comext dataset $dataset for year $year")
                         println(f, "Exception Type: $error_type")
@@ -284,7 +276,7 @@ function fetch_comext_data(years_range="1995-2023", custom_datasets=nothing)
     @info "  Successfully processed: $(stats[:successful]) ($(round(stats[:successful]/stats[:total_datasets]*100, digits=1))%)"
     @info "  Failed: $(stats[:failed])"
     @info "  Total rows processed: $(stats[:rows_processed])"
-    
+
     if stats[:successful] == 0
         @warn "No COMEXT data was successfully fetched!"
         @info "Recommendations:"

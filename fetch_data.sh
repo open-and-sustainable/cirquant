@@ -22,7 +22,9 @@ echo "Output will be saved to CirQuant-database/raw/CirQuant_1995-2023.duckdb"
 echo
 
 # Run the Julia script and call the fetch_prodcom_data function with years parameter
-julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_prodcom_data(\"$YEARS\")" 2>&1 | tee prodcom.log
+#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_prodcom_data(\"$YEARS\")" 2>&1 | tee prodcom.log
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_comext_data(\"$YEARS\")" 2>&1 | tee comext.log
+#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee combined_fetch.log
 
 echo
-echo "Process completed. Log saved to prodcom.log"
+echo "Process completed. Log saved to combined_fetch.log"
