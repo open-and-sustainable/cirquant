@@ -68,9 +68,9 @@ version = "0.7.8"
 
 [[deps.ComextAPI]]
 deps = ["DataFrames", "Documenter", "HTTP", "JSON3"]
-git-tree-sha1 = "b901bf5078bd2b3b472d8f1b909e56541aa54315"
+git-tree-sha1 = "df3b155978946141c5c26139bf1f6a87a67b95c5"
 uuid = "429715f3-a472-491d-9db2-f3c6206abaaa"
-version = "0.0.4"
+version = "0.0.5"
 
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
