@@ -8,7 +8,7 @@ export write_duckdb_table!, write_large_duckdb_table!, executePRQL, recreate_duc
 
 # --- helpers ---------------------------------------------------------------
 
-escape_sql_string(s::String) = replace("'" * s * "'", "'" => "''")
+escape_sql_string(s::String) = "'" * replace(s, "'" => "''") * "'"
 
 sql_value(x) = x === nothing || x === missing ? "NULL" :
                x isa String ? escape_sql_string(x) : string(x)
@@ -23,27 +23,27 @@ If the table does not exist it returns `missing, missing`.
 function table_info(db_path::AbstractString, table_name::AbstractString)
     db = DuckDB.DB(db_path)
     con = DBInterface.connect(db)
-    
+
     try
         # Check if table exists
         result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.tables WHERE table_name = '$table_name'")
         result_df = DataFrames.DataFrame(result)
         exists = result_df[1, :n] > 0
-        
+
         if !exists
             return (missing, missing)
         end
-        
+
         # Get row count
         result = DuckDB.query(con, "SELECT count(*) AS n FROM \"$table_name\"")
         result_df = DataFrames.DataFrame(result)
         rows = result_df[1, :n]
-        
+
         # Get column count
         result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.columns WHERE table_name = '$table_name'")
         result_df = DataFrames.DataFrame(result)
         cols = result_df[1, :n]
-        
+
         return (rows, cols)
     finally
         DBInterface.close!(con)
@@ -66,12 +66,12 @@ function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::
         Missing => "VARCHAR",
         Any => "VARCHAR"
     )
-    
+
     # Determine types for each column, handling mixed types safely
     cols = []
     for (n, col) in zip(names(df), eachcol(df))
         T = eltype(col)
-        
+
         # For simplicity and reliability, use VARCHAR for most columns
         # DuckDB has better type inference on read than on write
         if T >: Missing && any((!ismissing(x) && (x isa String || !(x isa Number))) for x in col)
@@ -110,25 +110,25 @@ function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::
             end
         end
     end
-    
+
     # Try to create the table
     try
         DBInterface.execute(con, "DROP TABLE IF EXISTS \"$table\"")
         sql_columns = join(cols, ", ")
         create_sql = "CREATE TABLE \"$table\" ($sql_columns)"
-        
+
         @info "Creating table with SQL: $create_sql"
         DBInterface.execute(con, create_sql)
     catch e
         @error "Failed to create table with custom types" exception=e
-        
+
         # Fallback: Create table with simpler VARCHAR columns for everything
         @warn "Trying simplified table creation with all VARCHAR columns"
         DBInterface.execute(con, "DROP TABLE IF EXISTS \"$table\"")
-        
+
         simple_cols = ["\"$n\" VARCHAR" for n in names(df)]
         simple_sql = "CREATE TABLE \"$table\" ($(join(simple_cols, ", ")))"
-        
+
         @info "Creating table with simplified SQL: $simple_sql"
         DBInterface.execute(con, simple_sql)
     end
@@ -137,7 +137,7 @@ end
 function create_and_load_table_directly!(df, con, table)
     create_table_with_types!(df, con, table)
     for row in eachrow(df)
-        vals = join(sql_value.(row), ", ")
+        vals = join([sql_value(row[col]) for col in names(row)], ", ")
         DBInterface.execute(con, "INSERT INTO \"$table\" VALUES ($vals)")
     end
 end
@@ -145,30 +145,30 @@ end
 function clean_dataframe_for_duckdb(df)
     # Make a copy to avoid modifying the original
     clean_df = deepcopy(df)
-    
+
     # Replace problematic values in all columns
     for col in names(clean_df)
         # Convert Any columns to strings for safety
         if eltype(clean_df[!, col]) == Any
             clean_df[!, col] = [ismissing(x) ? missing : string(x) for x in clean_df[!, col]]
         end
-        
+
         # Handle special string values
         if eltype(clean_df[!, col]) >: String
-            clean_df[!, col] = [ismissing(x) ? missing : 
-                                (x isa String && (x == ":C" || x == ":c" || x == ":" || x == "-" || 
-                                 x == "null" || x == "NULL" || x == "NaN" || x == "Inf" || x == "-Inf")) ? missing : x 
+            clean_df[!, col] = [ismissing(x) ? missing :
+                                (x isa String && (x == ":C" || x == ":c" || x == ":" || x == "-" ||
+                                 x == "null" || x == "NULL" || x == "NaN" || x == "Inf" || x == "-Inf")) ? missing : x
                                 for x in clean_df[!, col]]
         end
-        
+
         # Handle problematic numeric values
         if eltype(clean_df[!, col]) >: Number
-            clean_df[!, col] = [ismissing(x) ? missing : 
-                                (x isa String || (x isa Number && !isfinite(x))) ? missing : x 
+            clean_df[!, col] = [ismissing(x) ? missing :
+                                (x isa String || (x isa Number && !isfinite(x))) ? missing : x
                                 for x in clean_df[!, col]]
         end
     end
-    
+
     # Additional checks for very large values that might cause DuckDB issues
     for col in names(clean_df)
         if eltype(clean_df[!, col]) >: Number
@@ -180,29 +180,29 @@ function clean_dataframe_for_duckdb(df)
             end
         end
     end
-    
+
     return clean_df
 end
 
 function create_and_load_table_throughCSV!(df, con, table)
     # Clean the dataframe to ensure DuckDB compatibility
     clean_df = clean_dataframe_for_duckdb(df)
-    
+
     # Create the table with proper types
     create_table_with_types!(clean_df, con, table)
-    
+
     # Write to CSV with careful handling of special characters
     tmp_path, tmp_io = mktemp()
     close(tmp_io)
     tmp = "$tmp_path.csv"
-    
+
     try
         @info "Writing $(nrow(clean_df)) rows to temporary CSV: $tmp"
         CSV.write(tmp, clean_df, delim=',', quotestrings=true, missingstring="NULL")
-        
+
         # Load CSV into DuckDB with explicit error handling
         @info "Copying data from CSV to DuckDB table: $table"
-        DBInterface.execute(con, 
+        DBInterface.execute(con,
             "COPY \"$table\" FROM '$tmp' (FORMAT CSV, HEADER TRUE, NULL 'NULL', IGNORE_ERRORS TRUE)")
         @info "Successfully loaded data into table: $table"
     catch e
@@ -228,35 +228,35 @@ end
 function create_and_load_table_chunked!(df, con, table, chunk_size=5000)
     # Clean the dataframe to ensure DuckDB compatibility
     clean_df = clean_dataframe_for_duckdb(df)
-    
+
     # Create the table with proper types
     create_table_with_types!(clean_df, con, table)
-    
+
     # Process in smaller chunks to avoid memory issues
     total_rows = nrow(clean_df)
     @info "Processing $total_rows rows in chunks of $chunk_size"
-    
+
     successful_chunks = 0
     total_chunks = ceil(Int, total_rows / chunk_size)
-    
+
     for chunk_start in 1:chunk_size:total_rows
         chunk_end = min(chunk_start + chunk_size - 1, total_rows)
         chunk = clean_df[chunk_start:chunk_end, :]
-        
+
         # Write chunk to CSV
         tmp_path, tmp_io = mktemp()
         close(tmp_io)
         tmp = "$tmp_path.csv"
-        
+
         chunk_success = false
         try
             @info "Writing chunk $(chunk_start)-$(chunk_end) to CSV ($(successful_chunks+1)/$total_chunks)"
             CSV.write(tmp, chunk, delim=',', quotestrings=true, missingstring="NULL")
-            
+
             # Load chunk into DuckDB
-            DBInterface.execute(con, 
+            DBInterface.execute(con,
                 "COPY \"$table\" FROM '$tmp' (FORMAT CSV, HEADER TRUE, NULL 'NULL', IGNORE_ERRORS TRUE)")
-            
+
             chunk_success = true
             successful_chunks += 1
         catch e
@@ -265,12 +265,12 @@ function create_and_load_table_chunked!(df, con, table, chunk_size=5000)
         finally
             isfile(tmp) && rm(tmp)
         end
-        
+
         @info "Processed $(chunk_end)/$(total_rows) rows ($(round(chunk_end/total_rows*100, digits=1))%) - Chunk $(chunk_success ? "succeeded" : "failed")"
     end
-    
+
     @info "Completed chunked processing for table: $table - $successful_chunks/$total_chunks chunks successful"
-    
+
     # Consider operation successful if at least 50% of chunks were processed
     return successful_chunks >= (total_chunks / 2)
 end
@@ -279,19 +279,19 @@ function create_and_load_table_direct!(df, con, table)
     # Clean and create table as before
     clean_df = clean_dataframe_for_duckdb(df)
     create_table_with_types!(clean_df, con, table)
-    
+
     # Insert data row by row with error handling
     total_rows = nrow(clean_df)
     successful_inserts = 0
-    
+
     @info "Inserting $total_rows rows directly"
-    
+
     for (i, row) in enumerate(eachrow(clean_df))
         try
             # Build INSERT statement
             cols = join(["\"$c\"" for c in names(clean_df)], ", ")
             vals = []
-            
+
             for val in row
                 if ismissing(val)
                     push!(vals, "NULL")
@@ -309,13 +309,13 @@ function create_and_load_table_direct!(df, con, table)
                     push!(vals, "'$(replace(string(val), "'" => "''"))'")
                 end
             end
-            
+
             values_str = join(vals, ", ")
             sql = "INSERT INTO \"$table\" ($cols) VALUES ($values_str)"
-            
+
             DBInterface.execute(con, sql)
             successful_inserts += 1
-            
+
             # Show progress periodically
             if i % 1000 == 0
                 @info "Inserted $i/$total_rows rows ($(round(i/total_rows*100, digits=1))%)"
@@ -325,7 +325,7 @@ function create_and_load_table_direct!(df, con, table)
             @warn "Failed to insert row $i" exception=e
         end
     end
-    
+
     @info "Direct insertion complete: $successful_inserts/$total_rows rows inserted successfully"
     return successful_inserts
 end
@@ -348,35 +348,35 @@ Returns a tuple (success::Bool, backup_path::String)
 function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
     # IMPORTANT: This function has been modified to NEVER replace the existing database
     # Instead, it creates a new database file with a different name and returns it
-    
+
     if !isfile(db_path)
         @info "No existing database found at $db_path, will create new one"
         # Create parent directory if it doesn't exist
         mkpath(dirname(db_path))
         return (true, "")
     end
-    
+
     # Instead of overwriting the existing database, create a new one with a timestamp
     new_db_path = "$(db_path)_new_$(round(Int, time()))"
     @info "SAFETY MEASURE: Creating new database at $new_db_path instead of replacing existing one"
-    
+
     try
         # Create a new database instead of replacing the existing one
         con = DuckDB.DB(new_db_path)
-        
+
         # Test query to ensure it's working
         DBInterface.execute(con, "CREATE TABLE test_table (id INTEGER)")
         DBInterface.execute(con, "DROP TABLE test_table")
         DBInterface.close!(con)
-        
+
         @info "Successfully created new database at $new_db_path"
         @info "IMPORTANT: The original database at $db_path has NOT been modified"
         @info "If you want to use the new database, manually rename $new_db_path to $db_path"
-        
+
         return (true, new_db_path)
     catch e
         @error "Failed to create new database" exception=e
-        
+
         # Try to clean up the new database if it was created but errored
         if isfile(new_db_path)
             try
@@ -386,7 +386,7 @@ function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
                 @warn "Failed to clean up new database file" exception=cleanup_err
             end
         end
-        
+
         return (false, "")
     end
 end
@@ -396,24 +396,24 @@ function write_large_duckdb_table!(df, db, table)
         @warn "Skipping write to DuckDB - dataframe is empty"
         return false
     end
-    
+
     row_count = nrow(df)
     col_count = ncol(df)
     @info "Writing dataframe to DuckDB table '$table' ($row_count rows, $col_count columns)"
-    
+
     # Try multiple methods with fallbacks if one fails
     methods = [
         (:csv, "CSV method", (df, con, table) -> create_and_load_table_throughCSV!(df, con, table)),
         (:chunked, "Chunked CSV method", (df, con, table) -> create_and_load_table_chunked!(df, con, table)),
         (:direct, "Direct SQL insertion", (df, con, table) -> create_and_load_table_direct!(df, con, table))
     ]
-    
+
     success = false
     db_recreated = false
-    
+
     for (method_id, method_name, method_func) in methods
         @info "Trying to write data using $method_name"
-        
+
         # Only create the connection inside the try block
         try
             db_conn = DuckDB.DB(db)
@@ -426,7 +426,7 @@ function write_large_duckdb_table!(df, db, table)
             break  # Exit the loop on success
         catch e
             @warn "Failed to write using $method_name" exception=e
-            
+
             # Check if this looks like a corrupted database error
             error_str = string(e)
             if !db_recreated && (
@@ -436,10 +436,10 @@ function write_large_duckdb_table!(df, db, table)
             )
                 @warn "Database may have issues, but we'll avoid recreation to preserve existing tables"
                 @warn "Will try alternative methods to write the data"
-                
+
                 # Instead of recreating the database, we'll just try the next method
                 # This way we don't risk losing existing tables
-                
+
                 # Make sure any existing connection is closed
                 if @isdefined con
                     try
@@ -456,7 +456,7 @@ function write_large_duckdb_table!(df, db, table)
                     end
                 end
             end
-            
+
             # Make sure connection is closed even on error
             try
                 if @isdefined con
@@ -468,12 +468,12 @@ function write_large_duckdb_table!(df, db, table)
             catch close_err
                 @warn "Failed to close connection" exception=close_err
             end
-            
+
             # Try dropping and recreating the table for the next attempt
             if method_id != methods[end][1]  # Not the last method
                 @info "Will try next method after failure"
                 # Prepare for next attempt by ensuring table doesn't exist
-                try 
+                try
                     drop_db = DuckDB.DB(db)
                     drop_con = DBInterface.connect(drop_db)
                     DBInterface.execute(drop_con, "DROP TABLE IF EXISTS \"$table\"")
@@ -485,16 +485,16 @@ function write_large_duckdb_table!(df, db, table)
             end
         end
     end
-    
+
     # If success is still false, all methods failed
     if !success
         @error "All methods failed to write data to table '$table'"
-        
+
         # Emergency fallback: Save to backup CSV file
         backup_dir = abspath(joinpath(dirname(db), "backup"))
         mkpath(backup_dir)
         backup_file = joinpath(backup_dir, "$(table)_$(round(Int, time())).csv")
-    
+
         @warn "Saving data to backup CSV file: $backup_file"
         try
             CSV.write(backup_file, df)
@@ -504,7 +504,7 @@ function write_large_duckdb_table!(df, db, table)
             @error "Failed to save backup file" exception=backup_err
         end
     end
-    
+
     return success  # Return the success status
 end
 
