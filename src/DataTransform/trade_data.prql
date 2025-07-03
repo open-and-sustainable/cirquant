@@ -1,0 +1,47 @@
+# PRQL query for extracting COMEXT trade data
+# This query extracts import/export volumes and values by product and country for a specific year
+
+from comext_DS_045409_{{YEAR}}
+# Filter for valid flow types and indicators (aggregate all partner countries)
+filter flow == "1" || flow == "2"
+filter indicators == "VALUE_IN_EUROS" || indicators == "QUANTITY_IN_100KG"
+derive {
+    # Handle different indicator types
+    value_eur = s"CASE WHEN indicators = 'VALUE_IN_EUROS' THEN value ELSE NULL END",
+    # Convert 100kg to tonnes
+    volume_tonnes = s"CASE WHEN indicators = 'QUANTITY_IN_100KG' THEN value * 0.1 ELSE NULL END",
+    # Ensure product code is clean (HS code)
+    product_code_clean = s"TRIM(product)",
+    # Identify flow type (flow column contains numeric codes)
+    is_import = s"CASE WHEN flow = '1' THEN 1 ELSE 0 END",
+    is_export = s"CASE WHEN flow = '2' THEN 1 ELSE 0 END"
+}
+derive {
+    # Split volumes and values by flow type
+    import_volume_tonnes = s"CASE WHEN flow = '1' AND indicators = 'QUANTITY_IN_100KG' THEN value * 0.1 ELSE 0 END",
+    import_value_eur = s"CASE WHEN flow = '1' AND indicators = 'VALUE_IN_EUROS' THEN value ELSE 0 END",
+    export_volume_tonnes = s"CASE WHEN flow = '2' AND indicators = 'QUANTITY_IN_100KG' THEN value * 0.1 ELSE 0 END",
+    export_value_eur = s"CASE WHEN flow = '2' AND indicators = 'VALUE_IN_EUROS' THEN value ELSE 0 END"
+}
+select {
+    product_code = product_code_clean,
+    year,
+    geo = reporter,
+    level = s"CASE WHEN reporter = 'EU27' THEN 'EU' ELSE 'country' END",
+    import_volume_tonnes,
+    import_value_eur,
+    export_volume_tonnes,
+    export_value_eur
+}
+# Group by dimensions to aggregate flows
+group {product_code, year, geo, level} (
+    aggregate {
+        import_volume_tonnes = sum import_volume_tonnes,
+        import_value_eur = sum import_value_eur,
+        export_volume_tonnes = sum export_volume_tonnes,
+        export_value_eur = sum export_value_eur
+    }
+)
+# Filter out records with no trade
+filter import_value_eur > 0 || export_value_eur > 0 || import_volume_tonnes > 0 || export_volume_tonnes > 0
+sort {product_code, geo}

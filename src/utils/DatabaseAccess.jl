@@ -508,13 +508,72 @@ function write_large_duckdb_table!(df, db, table)
     return success  # Return the success status
 end
 
-function executePRQL(dbpath, prqlpath)
-    db = DuckDB.DB(dbpath)
+"""
+    installPRQL_DuckDBextension()
+
+Install the PRQL extension from the DuckDB community repository.
+This function needs to be called once before using PRQL queries.
+"""
+function installPRQL_DuckDBextension()
+    db = DuckDB.DB()
     con = DBInterface.connect(db)
     try
-        DuckDB.execute(con, "LOAD 'prql'")
-        DataFrame(DuckDB.query(con, read(prqlpath, String)))
+        # Attempt to install the PRQL extension from community repository
+        DBInterface.execute(con, "INSTALL 'prql' FROM community;")
+        DBInterface.execute(con, "LOAD 'prql';")
+
+        @info "PRQL extension installed and loaded successfully."
+        return true
+    catch e
+        @error "Error during PRQL extension installation" exception = e
+        return false
     finally
+        DBInterface.close!(con)
+        DBInterface.close!(db)
+    end
+end
+
+"""
+    executePRQL(dbpath::String, prqlpath::String)::DataFrame
+
+Execute a PRQL query from a file against a DuckDB database.
+
+# Arguments
+- `dbpath::String`: Path to the DuckDB database file
+- `prqlpath::String`: Path to the PRQL query file
+
+# Returns
+- `DataFrame`: Query results as a DataFrame
+- Empty DataFrame if an error occurs
+
+# Example
+```julia
+result = executePRQL("data.duckdb", "query.prql")
+```
+"""
+function executePRQL(dbpath::String, prqlpath::String)::DataFrame
+    db = DuckDB.DB(dbpath)
+    con = DBInterface.connect(db)
+
+    try
+        # Load the PRQL extension
+        DBInterface.execute(con, "LOAD 'prql';")
+
+        # Read the PRQL code from the file
+        prql_query = read(prqlpath, String)
+
+        # Execute the PRQL query and capture the result
+        result = DBInterface.execute(con, prql_query)
+        result_df = DataFrame(result)
+
+        # Return the resulting DataFrame
+        return result_df
+    catch e
+        # Handle any errors that occur during the process
+        @error "Error during PRQL execution" exception = e
+        return DataFrame()  # Return an empty DataFrame in case of error
+    finally
+        # Ensure the database connection is closed
         DBInterface.close!(con)
         DBInterface.close!(db)
     end

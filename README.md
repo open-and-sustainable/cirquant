@@ -14,10 +14,16 @@ CirQuant has been refactored to use the external ProdcomAPI package for fetching
 ### Components:
 
 - **ProdcomAPI**: External package that handles communication with the Eurostat PRODCOM API
+- **ComextAPI**: External package that handles communication with the Eurostat COMEXT API
 - **CirQuant**: This package, which focuses on:
-  - Fetching data using ProdcomAPI
+  - Fetching data using ProdcomAPI and ComextAPI
   - Storing data in the raw DuckDB database
   - Transforming and analyzing the data
+- **DataTransform Module**: Core transformation component that:
+  - Creates year-specific circularity indicator tables
+  - Executes PRQL queries for flexible data extraction
+  - Maps between PRODCOM and HS product classifications
+  - Calculates apparent consumption and circularity metrics
 
 ## Usage
 
@@ -41,6 +47,100 @@ datasets = CirQuant.get_available_datasets()
 ```
 
 For a complete example, see `fetch_example.jl` in the repository.
+
+## Data Transformation
+
+The DataTransform module handles the processing of raw PRODCOM and COMEXT data into structured circularity indicators.
+
+### Overview
+
+The module provides:
+- Creation of structured tables for circularity indicators (year-specific)
+- Loading and using product conversion mappings between PRODCOM and HS codes
+- Execution of PRQL queries to extract data from raw tables
+- Transformation and combination of production and trade data
+- Calculation of apparent consumption and circularity metrics
+
+### Data Structure
+
+Each year's circularity indicators table contains:
+
+**Dimensions (Identifiers):**
+- `product_code`: PRODCOM or combined code
+- `product_name`: Human-readable product label
+- `year`: Reference year
+- `geo`: Spatial level (EU country code or "EU27")
+- `level`: "country" or "EU" aggregate
+
+**Key Indicators:**
+
+Production:
+- `production_volume_tonnes`: Quantity produced (tonnes)
+- `production_value_eur`: Production value (€)
+
+Trade:
+- `import_volume_tonnes`: Quantity imported (tonnes)
+- `import_value_eur`: Value of imports (€)
+- `export_volume_tonnes`: Quantity exported (tonnes)
+- `export_value_eur`: Value of exports (€)
+
+Apparent Consumption:
+- `apparent_consumption_tonnes`: production + imports - exports
+- `apparent_consumption_value_eur`: Monetary value of apparent consumption
+
+Circularity Indicators:
+- `current_circularity_rate_pct`: % of material currently recirculated
+- `potential_circularity_rate_pct`: % achievable with digital innovations
+- `estimated_material_savings_tonnes`: Potential tonnes saved
+- `estimated_monetary_savings_eur`: Estimated € saved
+
+### Usage Example
+
+```julia
+using CirQuant
+
+# Process data for year 2009
+year = 2009
+
+# 1. Create circularity table for the year
+success = create_circularity_table(year, db_path=DB_PATH_PROCESSED, replace=true)
+
+# 2. Validate table structure
+validation = validate_circularity_table(year, db_path=DB_PATH_PROCESSED)
+
+# 3. Inspect raw data tables
+table_info = inspect_raw_tables(DB_PATH_RAW, year)
+
+# 4. Process data using PRQL queries
+using CirQuant.CircularityProcessor
+
+prql_files = Dict(
+    "production" => "src/DataTransform/production_data.prql",
+    "trade" => "src/DataTransform/trade_data.prql"
+)
+
+results = CircularityProcessor.process_year_data(
+    year,
+    raw_db_path=DB_PATH_RAW,
+    processed_db_path=DB_PATH_PROCESSED,
+    prql_files=prql_files,
+    replace=true
+)
+```
+
+### Raw Database Structure
+
+The raw database contains year-specific tables:
+- PRODCOM: `prodcom_ds_056120_YYYY`, `prodcom_ds_056121_YYYY`
+- COMEXT: `comext_DS_045409_YYYY`
+
+Where `YYYY` is the 4-digit year (e.g., 2009).
+
+### PRQL Query Support
+
+The module uses PRQL (Pipelined Relational Query Language) for data extraction. PRQL files support year substitution using the `{{YEAR}}` placeholder, allowing flexible queries across different years.
+
+For a complete processing example, see `examples/process_year_2009.jl`.
 
 ## Getting Started
 
