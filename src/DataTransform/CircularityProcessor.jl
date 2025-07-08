@@ -8,6 +8,12 @@ using Dates
 using ..DatabaseAccess
 using ..ProductConversionTables
 
+# Include the unit converter modules
+include("UnitConversion/UnitConverter.jl")
+include("ProdcomUnitConverter.jl")
+using .UnitConverter
+using .ProdcomUnitConverter
+
 export create_circularity_table, get_circularity_table_name, validate_circularity_table, create_circularity_tables_range
 export process_year_data, execute_prql_for_year, load_product_mapping, inspect_raw_tables, ensure_prql_installed
 
@@ -381,6 +387,25 @@ function execute_prql_for_year(prql_path::String, db_path::String, year::Int)
         rm(temp_prql, force=true)
 
         @info "Query executed successfully, returned $(nrow(result_df)) rows"
+
+        # Debug: Show what the PRQL query returned
+        if contains(prql_path, "production") && nrow(result_df) > 0
+            @info "DEBUG: PRQL production query results:"
+            println("Columns: ", names(result_df))
+            println("First 5 rows:")
+            println(first(result_df, min(5, nrow(result_df))))
+
+            # Check for non-zero values
+            if "production_volume_tonnes" in names(result_df)
+                non_zero_vol = count(x -> !ismissing(x) && x > 0, result_df.production_volume_tonnes)
+                @info "DEBUG: Non-zero production volumes: $non_zero_vol out of $(nrow(result_df))"
+            end
+            if "production_value_eur" in names(result_df)
+                non_zero_val = count(x -> !ismissing(x) && x > 0, result_df.production_value_eur)
+                @info "DEBUG: Non-zero production values: $non_zero_val out of $(nrow(result_df))"
+            end
+        end
+
         return result_df
 
     catch e
@@ -468,12 +493,56 @@ function process_year_data(year::Int;
                 continue
             end
 
+            @info "Query result for $data_type: $(nrow(query_result)) rows"
+            if data_type == "production" && nrow(query_result) > 0
+                # Show first few rows for debugging
+                @info "Sample production data:"
+                println(first(query_result, min(5, nrow(query_result))))
+
+                # Check for non-zero values
+                non_zero_volume = count(x -> !ismissing(x) && x > 0, query_result.production_volume_tonnes)
+                non_zero_value = count(x -> !ismissing(x) && x > 0, query_result.production_value_eur)
+                @info "Non-zero production counts: volume=$non_zero_volume, value=$non_zero_value"
+            end
+
             results[:queries_executed][data_type] = true
             results[:rows_processed] += nrow(query_result)
 
-            # TODO: Transform and insert data into circularity table
-            # This would involve mapping the query results to the circularity table structure
-            # and handling product code conversions using the product_mapping DataFrame
+            # Store query results for later processing
+            if data_type == "production"
+                production_data = query_result
+                @info "Stored production data with $(nrow(production_data)) rows"
+            elseif data_type == "trade"
+                trade_data = query_result
+                @info "Stored trade data with $(nrow(trade_data)) rows"
+            end
+        end
+
+        # Step 4: Combine and transform data
+        @info "Step 4/4: Combining and inserting data into circularity table"
+
+        # Initialize DataFrames if they don't exist
+        if !@isdefined(production_data)
+            production_data = DataFrame()
+        end
+        if !@isdefined(trade_data)
+            trade_data = DataFrame()
+        end
+
+        # Process and insert the data
+        rows_inserted = combine_and_insert_data(
+            year,
+            production_data,
+            trade_data,
+            product_mapping,
+            processed_db_path
+        )
+
+        if rows_inserted > 0
+            @info "Successfully inserted $rows_inserted rows into circularity table"
+            results[:rows_inserted] = rows_inserted
+        else
+            push!(results[:errors], "No data was inserted into the circularity table")
         end
 
         results[:success] = true
@@ -634,6 +703,335 @@ function inspect_raw_tables(db_path::String, year::Int; show_sample::Bool=false)
     catch e
         @error "Error inspecting raw tables" exception = e
         return results
+    end
+end
+
+"""
+    combine_and_insert_data(year::Int, production_df::DataFrame, trade_df::DataFrame,
+                           mapping_df::DataFrame, db_path::String)
+
+Combines production and trade data, maps product codes, calculates indicators,
+and inserts into the circularity table.
+
+# Arguments
+- `year::Int`: Year being processed
+- `production_df::DataFrame`: Production data from PRQL query
+- `trade_df::DataFrame`: Trade data from PRQL query
+- `mapping_df::DataFrame`: Product mapping table
+- `db_path::String`: Path to the processed database
+
+# Returns
+- `Int`: Number of rows inserted
+"""
+function combine_and_insert_data(year::Int, production_df::DataFrame, trade_df::DataFrame,
+                                mapping_df::DataFrame, db_path::String)
+    try
+        @info "Combining production and trade data for year $year"
+
+        # Get table name
+        table_name = get_circularity_table_name(year)
+
+        # Initialize results DataFrame
+        results_df = DataFrame()
+
+        # Process production data if available
+        if nrow(production_df) > 0
+            @info "Processing $(nrow(production_df)) production records"
+
+            # Debug: Show incoming production data
+            @info "DEBUG: Incoming production_df summary:"
+            println("Columns: ", names(production_df))
+            println("First 5 rows:")
+            println(first(production_df, min(5, nrow(production_df))))
+
+            # Check for non-zero values before mapping
+            non_zero_vol_before = count(x -> !ismissing(x) && x > 0, production_df.production_volume_tonnes)
+            non_zero_val_before = count(x -> !ismissing(x) && x > 0, production_df.production_value_eur)
+            @info "DEBUG: Before mapping - Non-zero counts: volume=$non_zero_vol_before, value=$non_zero_val_before"
+
+            # Show some specific examples of non-zero records
+            if non_zero_vol_before > 0
+                non_zero_examples = filter(row -> !ismissing(row.production_volume_tonnes) && row.production_volume_tonnes > 0, production_df)
+                @info "DEBUG: Example non-zero volume records:"
+                println(first(non_zero_examples, min(3, nrow(non_zero_examples))))
+            end
+
+            # Map product codes to standardized products
+            prod_mapped = map_product_codes(
+                production_df,
+                mapping_df,
+                source_code_col=:product_code,
+                source_type=:prodcom_code
+            )
+
+            # Debug: Show mapping results
+            @info "DEBUG: After mapping - $(nrow(prod_mapped)) records"
+            println("Columns after mapping: ", names(prod_mapped))
+
+            # Check for non-zero values after mapping
+            non_zero_vol_after = count(x -> !ismissing(x) && x > 0, prod_mapped.production_volume_tonnes)
+            non_zero_val_after = count(x -> !ismissing(x) && x > 0, prod_mapped.production_value_eur)
+            @info "DEBUG: After mapping - Non-zero counts: volume=$non_zero_vol_after, value=$non_zero_val_after"
+
+            # Select and rename columns for insertion
+            prod_for_insert = select(prod_mapped,
+                :product_code => :product_code,
+                :product_name => :product_name,
+                :year => :year,
+                :geo => :geo,
+                :level => :level,
+                :production_volume_tonnes => :production_volume_tonnes,
+                :production_value_eur => :production_value_eur
+            )
+
+            # Debug: Final check before assignment
+            @info "DEBUG: Final prod_for_insert - $(nrow(prod_for_insert)) records"
+            non_zero_vol_final = count(x -> !ismissing(x) && x > 0, prod_for_insert.production_volume_tonnes)
+            non_zero_val_final = count(x -> !ismissing(x) && x > 0, prod_for_insert.production_value_eur)
+            @info "DEBUG: Final non-zero counts: volume=$non_zero_vol_final, value=$non_zero_val_final"
+
+            # Show sample of final data
+            println("Sample of final production data:")
+            println(first(prod_for_insert, min(5, nrow(prod_for_insert))))
+
+            results_df = prod_for_insert
+        end
+
+        # Process trade data if available
+        if nrow(trade_df) > 0
+            @info "Processing $(nrow(trade_df)) trade records"
+
+            # Map product codes for trade data (HS codes)
+            trade_mapped = map_product_codes(
+                trade_df,
+                mapping_df,
+                source_code_col=:product_code,
+                source_type=:hs_codes
+            )
+
+            # If we have production data, merge with trade data
+            if nrow(results_df) > 0
+                # Merge on product_code, geo, year, level
+                results_df = outerjoin(
+                    results_df,
+                    trade_mapped,
+                    on = [:product_code, :geo, :year, :level],
+                    makeunique = true
+                )
+
+                # Handle duplicate columns from join
+                for col in [:product_name, :product_id]
+                    if "$(col)_1" in names(results_df)
+                        results_df[!, col] = coalesce.(results_df[!, col], results_df[!, "$(col)_1"])
+                        select!(results_df, Not("$(col)_1"))
+                    end
+                end
+            else
+                # Only trade data available
+                trade_for_insert = select(trade_mapped,
+                    :product_code => :product_code,
+                    :product_name => :product_name,
+                    :year => :year,
+                    :geo => :geo,
+                    :level => :level,
+                    :import_volume_tonnes => :import_volume_tonnes,
+                    :import_value_eur => :import_value_eur,
+                    :export_volume_tonnes => :export_volume_tonnes,
+                    :export_value_eur => :export_value_eur
+                )
+                results_df = trade_for_insert
+            end
+        end
+
+        # Calculate apparent consumption
+        if nrow(results_df) > 0
+            # Initialize missing columns with appropriate default values
+            for col in [:production_volume_tonnes, :production_value_eur,
+                       :import_volume_tonnes, :import_value_eur,
+                       :export_volume_tonnes, :export_value_eur]
+                if !(col in names(results_df))
+                    results_df[!, col] = fill(0.0, nrow(results_df))
+                else
+                    # Replace missing with 0
+                    results_df[!, col] = coalesce.(results_df[!, col], 0.0)
+                end
+            end
+
+            # Calculate apparent consumption
+            results_df[!, :apparent_consumption_tonnes] =
+                results_df.production_volume_tonnes .+
+                results_df.import_volume_tonnes .-
+                results_df.export_volume_tonnes
+
+            results_df[!, :apparent_consumption_value_eur] =
+                results_df.production_value_eur .+
+                results_df.import_value_eur .-
+                results_df.export_value_eur
+
+            # Add placeholder circularity indicators (to be calculated later)
+            results_df[!, :current_circularity_rate_pct] = fill(missing, nrow(results_df))
+            results_df[!, :potential_circularity_rate_pct] = fill(missing, nrow(results_df))
+            results_df[!, :estimated_material_savings_tonnes] = fill(missing, nrow(results_df))
+            results_df[!, :estimated_monetary_savings_eur] = fill(missing, nrow(results_df))
+
+            # Ensure product_name is not missing
+            results_df[!, :product_name] = coalesce.(results_df.product_name, "Unknown Product")
+
+            # Filter to only include mapped products (where we have product names)
+            results_df = results_df[results_df.product_name .!= "Unknown Product", :]
+
+            @info "Prepared $(nrow(results_df)) rows for insertion"
+
+            # Insert data into database
+            if nrow(results_df) > 0
+                db_conn = DuckDB.DB(db_path)
+                con = DBInterface.connect(db_conn)
+
+                try
+                    # Use DatabaseAccess function to write the data
+                    DatabaseAccess.write_duckdb_table!(results_df, db_path, table_name)
+
+                    # Get actual row count
+                    count_result = DBInterface.execute(con,
+                        "SELECT COUNT(*) as cnt FROM $table_name"
+                    ) |> DataFrame
+
+                    rows_inserted = count_result.cnt[1]
+                    @info "Successfully inserted $rows_inserted rows into $table_name"
+
+                    return rows_inserted
+
+                finally
+                    DBInterface.close!(con)
+                    DBInterface.close!(db_conn)
+                end
+            end
+        end
+
+        return 0
+
+    catch e
+        @error "Error combining and inserting data" exception = e
+        return 0
+    end
+end
+
+# Arguments:
+# - `db_path::String`: Path to the raw database
+# - `year::Int`: Year to debug
+# - `product_code::Union{String,Nothing}`: Optional specific product code to filter
+#
+# Returns:
+# - `Dict`: Debug information showing data at each stage of processing
+function debug_production_pipeline(db_path::String, year::Int; product_code::Union{String,Nothing}=nothing)
+    debug_info = Dict{String,Any}()
+
+    try
+        @info "Debugging production pipeline for year $year"
+
+        # Step 1: Check raw table structure and sample data
+        db_conn = DuckDB.DB(db_path)
+        con = DBInterface.connect(db_conn)
+
+        table_name = "prodcom_ds_056120_$year"
+
+        # Get sample of raw data
+        sample_query = """
+        SELECT *
+        FROM $table_name
+        WHERE indicators IN ('PRODQNT', 'PRODVAL')
+        $(product_code !== nothing ? "AND prccode = '$product_code'" : "")
+        LIMIT 20
+        """
+
+        raw_sample = DBInterface.execute(con, sample_query) |> DataFrame
+        debug_info["raw_sample"] = raw_sample
+
+        @info "Raw data sample ($(nrow(raw_sample)) rows):"
+        println(raw_sample)
+
+        # Step 2: Check distinct values for key columns
+        distinct_query = """
+        SELECT
+            indicators,
+            COUNT(*) as count,
+            COUNT(DISTINCT value) as distinct_values,
+            MIN(value) as min_value,
+            MAX(value) as max_value
+        FROM $table_name
+        WHERE indicators IN ('PRODQNT', 'PRODVAL')
+        $(product_code !== nothing ? "AND prccode = '$product_code'" : "")
+        GROUP BY indicators
+        """
+
+        distinct_values = DBInterface.execute(con, distinct_query) |> DataFrame
+        debug_info["distinct_values"] = distinct_values
+
+        @info "Value distribution by indicator:"
+        println(distinct_values)
+
+        # Step 3: Execute PRQL and check result
+        prql_path = joinpath(dirname(@__FILE__), "production_data.prql")
+        production_df = execute_prql_for_year(prql_path, db_path, year)
+
+        if product_code !== nothing
+            production_df = filter(row -> row.product_code == product_code, production_df)
+        end
+
+        debug_info["prql_result"] = production_df
+        debug_info["prql_result_rows"] = nrow(production_df)
+
+        @info "PRQL result ($(nrow(production_df)) rows):"
+        if nrow(production_df) > 0
+            println(first(production_df, min(10, nrow(production_df))))
+        else
+            println("No data returned from PRQL query")
+        end
+
+        # Step 4: Check specific product codes
+        if nrow(production_df) > 0
+            prod_summary = combine(
+                groupby(production_df, :product_code),
+                :production_volume_tonnes => (x -> sum(skipmissing(x))) => :total_volume,
+                :production_value_eur => (x -> sum(skipmissing(x))) => :total_value,
+                nrow => :count
+            )
+            debug_info["product_summary"] = prod_summary
+
+            @info "Production summary by product code:"
+            println(first(prod_summary, min(10, nrow(prod_summary))))
+        end
+
+        # Step 5: Check the value column content more closely
+        value_check_query = """
+        SELECT
+            prccode,
+            indicators,
+            value,
+            COUNT(*) as count
+        FROM $table_name
+        WHERE indicators IN ('PRODQNT', 'PRODVAL')
+        $(product_code !== nothing ? "AND prccode = '$product_code'" : "")
+        AND value NOT IN ('kg', 'p/st', 'm', 'm2', 'm3', 'l', 'hl', 'ct/l')
+        GROUP BY prccode, indicators, value
+        ORDER BY count DESC
+        LIMIT 20
+        """
+
+        value_distribution = DBInterface.execute(con, value_check_query) |> DataFrame
+        debug_info["value_distribution"] = value_distribution
+
+        @info "Value column distribution:"
+        println(value_distribution)
+
+        DBInterface.close!(con)
+        DBInterface.close!(db_conn)
+
+        return debug_info
+
+    catch e
+        @error "Error in debug_production_pipeline" exception = e
+        return debug_info
     end
 end
 

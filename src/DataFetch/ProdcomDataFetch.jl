@@ -1,6 +1,6 @@
 module ProdcomDataFetch
 
-using HTTP, JSON3, DataFrames, Dates, DuckDB, CSV, ProdcomAPI
+using HTTP, JSON3, DataFrames, Dates, DuckDB, CSV, ComextAPI
 using ..DatabaseAccess: write_large_duckdb_table!, recreate_duckdb_database
 
 export fetch_prodcom_data

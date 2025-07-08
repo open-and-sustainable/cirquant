@@ -12,12 +12,15 @@ include("utils/ProductConversionTables.jl")
 include("DataFetch/ProdcomDataFetch.jl")
 include("DataFetch/ComextDataFetch.jl")
 include("DataTransform/CircularityProcessor.jl")
+include("DataTransform/UnitConversion/UnitConverter.jl")
+include("DataTransform/ProdcomUnitConverter.jl")
 
 using .DatabaseAccess
 using .ProductConversionTables
 using .ProdcomDataFetch
 using .ComextDataFetch
 using .CircularityProcessor
+using .ProdcomUnitConverter
 
 
 """
@@ -193,6 +196,37 @@ function fetch_combined_data(years_str::String="1995-2023", prodcom_datasets=not
     end
 
     return results
+end
+
+"""
+    convert_prodcom_to_tonnes(year::Int; db_path::String = DB_PATH_RAW)
+
+Converts PRODCOM production data for a specific year from various units to tonnes.
+This function processes raw PRODCOM data and converts all production quantities
+to a unified measurement unit (tonnes).
+
+# Arguments
+- `year::Int`: The year to process
+- `db_path::String`: Path to the raw DuckDB database (default: DB_PATH_RAW)
+
+# Returns
+- `DataFrame`: Converted production data with columns:
+  - product_code: PRODCOM product code
+  - geo: Geographic location (country code or EU27)
+  - year: Year of data
+  - production_tonnes: Production quantity in tonnes
+
+# Example
+```julia
+# Convert year 2020 data to tonnes
+df = convert_prodcom_to_tonnes(2020)
+
+# Convert with custom database path
+df = convert_prodcom_to_tonnes(2020, db_path="path/to/database.duckdb")
+```
+"""
+function convert_prodcom_to_tonnes(year::Int; db_path::String=DB_PATH_RAW)
+    return ProdcomUnitConverter.process_prodcom_to_tonnes(db_path, year)
 end
 
 """
@@ -413,5 +447,24 @@ end
 function ensure_prql_installed()
     return CircularityProcessor.ensure_prql_installed()
 end
+
+# Export public API functions
+export fetch_prodcom_data,
+       fetch_prodcom_dataset,
+       fetch_comext_data,
+       fetch_comext_dataset,
+       get_available_prodcom_datasets,
+       get_available_comext_datasets,
+       fetch_combined_data,
+       convert_prodcom_to_tonnes,
+       write_product_conversion_table,
+       read_product_conversion_table,
+       get_product_mapping_data,
+       get_product_by_code,
+       create_circularity_table,
+       validate_circularity_table,
+       create_circularity_tables_range,
+       inspect_raw_tables,
+       ensure_prql_installed
 
 end # module CirQuant
