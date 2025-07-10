@@ -3,6 +3,15 @@
 ## Project Description
 https://doi.org/10.17605/OSF.IO/U6SF3
 
+## Documentation
+
+Detailed documentation is available in the [`docs/`](docs/) folder:
+
+- **[Methodology](docs/methodology.md)**: Research approach, theoretical framework, and analytical methods
+- **[Data Sources](docs/data-sources.md)**: Details about PRODCOM and COMEXT datasets, indicators, and known issues
+- **[Raw Database Schema](docs/database-schema-raw.md)**: Structure of the raw data tables (PRODCOM/COMEXT)
+- **[Processed Database Schema](docs/database-schema-processed.md)**: Structure of the transformed analysis tables
+
 ## Architecture Overview
 
 CirQuant has been refactored to use the external ProdcomAPI package for fetching data from the Eurostat PRODCOM API. This separation of concerns allows for:
