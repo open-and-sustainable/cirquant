@@ -3,8 +3,8 @@ module CirQuant
 using DataFrames, ProdcomAPI, ComextAPI
 
 # Define the database paths as constants
-const DB_PATH_RAW = "CirQuant-database/raw/CirQuant_1995-2023.duckdb"
-const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_1995-2023.duckdb"
+const DB_PATH_RAW = "CirQuant-database/raw/CirQuant_2002-2023.duckdb"
+const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_2002-2023.duckdb"
 
 # Include and use the modules
 include("utils/DatabaseAccess.jl")
@@ -24,7 +24,7 @@ using .ProdcomUnitConverter
 
 
 """
-    fetch_prodcom_data(years_str::String="1995-2023", custom_datasets=nothing)
+    fetch_prodcom_data(years_str::String="2002-2023", custom_datasets=nothing)
 
 Fetches PRODCOM data using the external ProdcomAPI package and saves it to the raw DuckDB database.
 This function delegates all Eurostat API interactions to ProdcomAPI.jl, which handles the
@@ -33,16 +33,16 @@ data fetch process and persisting results to the database.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "1995-2023".
+              Default is "2002-2023".
 - `custom_datasets`: Optional. An array of dataset IDs to fetch.
                    If not provided, uses ProdcomAPI.get_available_datasets() to get default datasets.
 
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_prodcom_data(years_str::String="1995-2023", custom_datasets=nothing)
+function fetch_prodcom_data(years_str::String="2002-2023", custom_datasets=nothing)
     @info "Fetching PRODCOM data for years $years_str and saving to database"
-    ProdcomDataFetch.fetch_prodcom_data(years_str, custom_datasets)
+    ProdcomDataFetch.fetch_prodcom_data(years_str, custom_datasets; db_path=DB_PATH_RAW)
 end
 
 """
@@ -82,9 +82,9 @@ Parameters:
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_comext_data(years_str::String="1995-2023", custom_datasets=nothing)
+function fetch_comext_data(years_str::String="2002-2023", custom_datasets=nothing)
     @info "Fetching COMEXT data for years $years_str and saving to database"
-    return ComextDataFetch.fetch_comext_data(years_str, custom_datasets)
+    return ComextDataFetch.fetch_comext_data(years_str, custom_datasets; db_path=DB_PATH_RAW)
 end
 
 """

@@ -1,350 +1,211 @@
 module ComextDataFetch
 
-using HTTP, JSON3, DataFrames, Dates, DuckDB, CSV, ComextAPI
-using ..DatabaseAccess: write_large_duckdb_table!, recreate_duckdb_database
+using DataFrames, Dates, DuckDB, CSV, ComextAPI
+using ..DatabaseAccess: write_large_duckdb_table!
+using ..ProductConversionTables: get_product_mapping_data
 
 export fetch_comext_data
 
 """
-    fetch_comext_data(years_range="1995-2023")
+    fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String)
 
-Fetches COMEXT data from Eurostat API for specified datasets and year range.
+Fetches COMEXT data from Eurostat API for dataset DS-059341 using HS codes from ProductConversionTables.
+Fetches VALUE_EUR and QUANTITY_KG indicators for both imports and exports,
+for intra-EU and extra-EU trade.
 Data is saved to DuckDB tables in the raw database.
+
+# Arguments
+- `years_range::String`: Year range to fetch (default: "2002-2023")
+- `custom_datasets`: Ignored - only DS-059341 is used
+- `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 """
-function fetch_comext_data(years_range="1995-2023", custom_datasets=nothing)
+function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String)
     # Parse years
     years = split(years_range, "-")
-    start_year = parse(Int, years[1])
-    end_year = parse(Int, years[2])
-
-    # Get available datasets if none specified
-    datasets = if isnothing(custom_datasets)
-        try
-            available_datasets = ComextAPI.get_available_datasets()
-            if nrow(available_datasets) > 0
-                # Use all available datasets without filtering
-                @info "Found $(nrow(available_datasets)) available datasets"
-                Vector(available_datasets.dataset_id)
-            else
-                @warn "No datasets found from ComextAPI, trying alternative approaches"
-                # Try some common Comext dataset patterns
-                ["DS-016890", "DS-018995", "DS-041688"]
-            end
-        catch e
-            @warn "Failed to get available datasets from ComextAPI" exception = e
-            @info "Trying fallback dataset patterns commonly used for trade data"
-            # Common Eurostat trade dataset patterns
-            ["DS-016890", "DS-018995", "DS-041688", "DS-056125"]
-        end
+    if length(years) == 1
+        start_year = parse(Int, years[1])
+        end_year = start_year
+    elseif length(years) == 2
+        start_year = parse(Int, years[1])
+        end_year = parse(Int, years[2])
     else
-        custom_datasets
+        error("Invalid years format. Use either 'YYYY' for a single year or 'YYYY-YYYY' for a range.")
     end
 
-    @info "Found $(length(datasets)) datasets to process"
+    # Fixed parameters
+    dataset = "ds-059341"
+    freq = "A"  # Annual frequency
 
-    # Database path - use absolute path for reliability
-    db_path = abspath(joinpath(dirname(dirname(dirname(@__FILE__))), "CirQuant-database/raw/CirQuant_1995-2023.duckdb"))
+    # Define indicators
+    indicators = ["VALUE_EUR", "QUANTITY_KG"]
+
+    # Define partners (intra-EU and extra-EU)
+    partners = Dict(
+        "INTRA_EU" => "INT_EU27_2020",
+        "EXTRA_EU" => "EXT_EU27_2020"
+    )
+
+    # Define flows
+    flows = Dict(
+        "IMPORT" => 1,
+        "EXPORT" => 2
+    )
+
     @info "Using database path: $db_path"
 
-    # Track success/failure statistics
+    # Ensure directories exist
+    db_dir = dirname(db_path)
+    if !isdir(db_dir)
+        mkpath(db_dir)
+    end
+
+    # Get HS codes from ProductConversionTables
+    product_mapping = get_product_mapping_data()
+
+    # Extract and process unique HS codes
+    all_hs_codes = Set{String}()
+    for hs_code_entry in product_mapping.hs_codes
+        # Split by comma and clean each code
+        codes = split(hs_code_entry, ",")
+        for code in codes
+            # Clean: trim whitespace and remove dots
+            clean_code = replace(strip(code), "." => "")
+            if !isempty(clean_code)
+                push!(all_hs_codes, clean_code)
+            end
+        end
+    end
+
+    unique_hs_codes = collect(all_hs_codes)
+    @info "Found $(length(unique_hs_codes)) unique HS codes to fetch"
+
+    # Track statistics
     stats = Dict(
-        :total_datasets => length(datasets) * (end_year - start_year + 1),
+        :total_queries => 0,
         :successful => 0,
         :failed => 0,
         :rows_processed => 0
     )
 
-    # Ensure the database directory exists
-    db_dir = dirname(db_path)
-    if !isdir(db_dir)
-        @info "Creating database directory: $db_dir"
-        mkpath(db_dir)
-    end
+    # Process each year
+    for year in start_year:end_year
+        @info "Processing year: $year"
 
-    # Create a log directory for error dumps
-    log_dir = abspath(joinpath(dirname(dirname(dirname(@__FILE__))), "CirQuant-database/logs"))
-    if !isdir(log_dir)
-        @info "Creating log directory: $log_dir"
-        mkpath(log_dir)
-    end
+        # Collect all data for this year
+        year_data = DataFrame()
 
-    # Check if database exists and try to validate it
-    if isfile(db_path)
-        @info "Checking database integrity: $db_path"
-        db_valid = try
-            con = DuckDB.DB(db_path)
-            # Test query to check if database is accessible
-            DuckDB.query(con, "SELECT 1")
-            DBInterface.close!(con)
-            true
-        catch e
-            @warn "Database appears to be corrupted or inaccessible" exception = e
-            false
-        end
+        # Process each HS code
+        for hs_code in unique_hs_codes
+            # Process each indicator
+            for indicator in indicators
+                # Process each partner type
+                for (partner_type, partner_code) in partners
+                    # Process each flow
+                    for (flow_type, flow_code) in flows
+                        @info "Fetching: HS=$hs_code, Indicator=$indicator, Partner=$partner_type, Flow=$flow_type"
+                        stats[:total_queries] += 1
 
-        # If database seems corrupted, log a warning but continue without recreation
-        # to avoid losing existing data
-        if !db_valid
-            @warn "Database appears to have issues, but will continue without recreation to preserve existing tables"
-            @info "New data will be added to backup CSV files if database writes fail"
-        end
-    end
+                        # Log the exact API call parameters
+                        @info "API call parameters:" dataset=dataset year=year indicator=indicator product=hs_code freq=freq partner=partner_code flow=flow_code
+                        @info "Expected API call: fetch_comext_data(\"$dataset\", $year, \"$indicator\", \"$hs_code\", \"$freq\", \"$partner_code\", $flow_code)"
 
-    # Process each dataset and year
-    for dataset in datasets
-        @info "Processing Comext dataset: $dataset"
+                        try
+                            # Fetch data using ComextAPI
+                            df = ComextAPI.fetch_comext_data(
+                                dataset,
+                                year,
+                                indicator,
+                                hs_code,
+                                freq,
+                                partner_code,
+                                flow_code
+                            )
 
-        # Check what years are available for this dataset
-        available_years = try
-            years = ComextAPI.get_dataset_years(dataset)
-            @info "Dataset $dataset has data for years: $(length(years)) years available"
-            years
-        catch e
-            @warn "Failed to get available years for dataset $dataset, will try all requested years" exception = e
-            nothing  # Will try all years
-        end
+                            # Add delay to avoid rate limiting
+                            sleep(0.5)  # 500ms delay between API calls
 
-        for year in start_year:end_year
-            # Skip if year is not available for this dataset (only if we got a valid year list)
-            if !isnothing(available_years) && isa(available_years, AbstractArray) && !(year in available_years)
-                @info "Year $year not available for dataset $dataset (available: $(first(available_years, 3))...), skipping"
-                stats[:failed] += 1
-                continue
-            end
+                            if !isnothing(df) && nrow(df) > 0
+                                # Add metadata columns for clarity
+                                df[!, :hs_code_query] .= hs_code
+                                df[!, :indicator_query] .= indicator
+                                df[!, :partner_type] .= partner_type
+                                df[!, :partner_code] .= partner_code
+                                df[!, :flow_type] .= flow_type
+                                df[!, :flow_code] .= flow_code
+                                df[!, :fetch_date] .= now()
 
-            @info "Fetching Comext data for dataset $dataset, year: $year"
+                                # Convert value columns to strings to handle mixed types
+                                if hasproperty(df, :value)
+                                    df[!, :value] = string.(df.value)
+                                end
 
-            try
-                # Fetch data using ComextAPI with additional error context
-                @info "Attempting to fetch dataset $dataset for year $year..."
-                start_time = time()
+                                # Append to year data
+                                if nrow(year_data) == 0
+                                    year_data = df
+                                else
+                                    year_data = vcat(year_data, df, cols=:union)
+                                end
 
-                df = try
-                    ComextAPI.fetch_comext_dataset(dataset, year)
-                catch fetch_error
-                    # Provide helpful information about the error
-                    if isa(fetch_error, HTTP.Exceptions.StatusError)
-                        status = fetch_error.status
-                        if status == 404
-                            @warn "Dataset $dataset not found for year $year (HTTP 404)"
-                            @info "This might mean:"
-                            @info "  - Dataset ID is incorrect"
-                            @info "  - Year $year is not available for this dataset"
-                            @info "  - Dataset has been renamed or discontinued"
-                        elseif status == 500
-                            @warn "Server error for dataset $dataset year $year (HTTP 500)"
-                            @info "This is likely a temporary Eurostat API issue"
-                        else
-                            @warn "HTTP error $status for dataset $dataset year $year"
-                        end
-                    end
-                    rethrow(fetch_error)
-                end
+                                @info "Retrieved $(nrow(df)) rows"
+                            else
+                                @debug "No data for combination"
+                            end
 
-                processing_time = round(time() - start_time, digits=2)
-                @info "Successfully fetched $(nrow(df)) rows in $processing_time seconds"
-
-                # Add metadata columns to match Prodcom structure
-                df[!, :dataset] = fill(dataset, nrow(df))
-                df[!, :year] = fill(year, nrow(df))
-                df[!, :fetch_date] = fill(now(), nrow(df))
-                df[!, :data_source] = fill("Eurostat COMEXT API", nrow(df))
-
-                # Clean and process the dataframe for DuckDB compatibility
-                df = clean_comext_dataframe(df, dataset, year)
-
-                # Save to DuckDB
-                table_name = "comext_$(replace(dataset, "-" => "_"))_$year"
-                if !isempty(df)
-                    # Record row count for statistics
-                    stats[:rows_processed] += nrow(df)
-
-                    # Write to database
-                    @info "Writing $(nrow(df)) rows to database (processed in $processing_time seconds)"
-
-                    # Try writing with error handling
-                    success = false
-                    try
-                        # Check if the database appears to be valid
-                        db_valid = try
-                            con = DuckDB.DB(db_path)
-                            DuckDB.query(con, "SELECT 1")
-                            DBInterface.close!(con)
-                            true
-                        catch db_check_error
-                            @warn "Database seems inaccessible, but will continue without recreation" exception = db_check_error
-                            @info "Will attempt to write data with fallback to CSV backup if needed"
-                            false
-                        end
-
-                        # Handle both possible outcomes (success or error)
-                        success = try
-                            # Try to write to DuckDB but catch any error
-                            write_large_duckdb_table!(df, db_path, table_name)
-                        catch db_error
-                            @error "Failed to write to DuckDB through main function" exception = db_error table = table_name
-                            # Signal failure but don't propagate error
-                            false
-                        end
-
-                        if success === true  # Explicit comparison to ensure boolean true
-                            @info "✓ Successfully saved Comext data to table $table_name"
-                            stats[:successful] += 1
-                        else
-                            # Manual fallback if automatic ones didn't work
-                            @warn "Automatic methods failed, saving to backup CSV"
+                        catch e
+                            @warn "Failed to fetch data" hs_code indicator partner_type flow_type exception=e
                             stats[:failed] += 1
 
-                            # Save problematic dataframe for inspection and backup
-                            backup_dir = joinpath(log_dir, "backups")
-                            mkpath(backup_dir)
-                            backup_file = joinpath(backup_dir, "backup_comext_$(dataset)_$(year)_$(round(Int, time())).csv")
-
-                            try
-                                # Save complete dataset as backup
-                                @info "Saving emergency backup to $backup_file"
-                                CSV.write(backup_file, df)
-                                @info "✓ Successfully saved backup data to $backup_file"
-                                @info "Data can be manually imported later with: COPY \"$(table_name)\" FROM '$(backup_file)' (FORMAT CSV, HEADER);"
-                            catch csv_err
-                                @warn "Failed to save complete backup data" exception = csv_err
-
-                                # Last resort: try to save a small sample
-                                sample_file = joinpath(log_dir, "sample_comext_$(dataset)_$(year)_$(round(Int, time())).csv")
-                                try
-                                    CSV.write(sample_file, df[1:min(1000, nrow(df)), :])
-                                    @info "Saved sample of problematic data to $sample_file"
-                                catch sample_err
-                                    @error "All backup methods failed" exception = sample_err
-                                end
-                            end
+                            # Add delay even on failure to avoid rate limiting
+                            sleep(1.0)  # 1 second delay after failed requests
                         end
-                    catch outer_err
-                        # Catch any unexpected errors to prevent the entire process from failing
-                        @error "Unexpected error in database writing process" exception = outer_err
-                        stats[:failed] += 1
                     end
-                else
-                    @warn "No data to save for Comext dataset $dataset, year $year"
-                    stats[:failed] += 1
                 end
+            end
+        end
+
+        # Save the collected data for this year
+        if nrow(year_data) > 0
+            table_name = "comext_$(replace(dataset, "-" => "_"))_$year"
+
+            try
+                # Write to database
+                @info "Writing $(nrow(year_data)) rows to table $table_name"
+                write_large_duckdb_table!(year_data, db_path, table_name)
+
+                stats[:successful] += 1
+                stats[:rows_processed] += nrow(year_data)
+                @info "✓ Successfully saved data to table $table_name"
+
             catch e
-                @error "Error processing Comext dataset $dataset for year $year" exception = e
-                @info "Continuing with next year/dataset to avoid losing progress"
+                @error "Failed to write data to database" table=table_name exception=e
                 stats[:failed] += 1
 
-                # Create an error log with details and suggestions
-                error_log = joinpath(log_dir, "error_comext_$(dataset)_$(year)_$(round(Int, time())).txt")
-                try
-                    # Extract basic info before opening file to avoid closure issues
-                    error_type = string(typeof(e))
-                    error_msg = try
-                        sprint(showerror, e)
-                    catch
-                        "Error message could not be extracted"
-                    end
+                # Save as backup CSV
+                backup_dir = joinpath(db_dir, "..", "logs", "backups")
+                mkpath(backup_dir)
+                backup_file = joinpath(backup_dir, "backup_$(table_name)_$(round(Int, time())).csv")
 
-                    open(error_log, "w") do f
-                        println(f, "Error processing Comext dataset $dataset for year $year")
-                        println(f, "Exception Type: $error_type")
-                        println(f, "Exception Message: $error_msg")
-                        println(f, "")
-                        println(f, "Troubleshooting suggestions:")
-                        println(f, "1. Check if dataset $dataset exists in Eurostat database")
-                        println(f, "2. Verify if year $year is available for this dataset")
-                        println(f, "3. Try using bulk download instead: https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?dir=comext")
-                        println(f, "4. Check Eurostat API status: https://ec.europa.eu/eurostat/web/json-and-unicode-web-services")
-                        println(f, "5. Consider using alternative dataset IDs")
-                        println(f, "")
-                        println(f, "Common working Comext datasets to try:")
-                        println(f, "- Monthly trade data: Use bulk download CSV files")
-                        println(f, "- Annual aggregated data: Check DS-016890, DS-018995")
-                        println(f, "")
-                        println(f, "Stacktrace: Available in Julia logs")
-                    end
-                    @info "Error details and troubleshooting saved to $error_log"
-                catch log_err
-                    @warn "Failed to save error log" exception = log_err
+                try
+                    CSV.write(backup_file, year_data)
+                    @info "Saved backup to $backup_file"
+                catch csv_err
+                    @error "Failed to save backup CSV" exception=csv_err
                 end
             end
+        else
+            @warn "No data collected for year $year"
+            stats[:failed] += 1
         end
     end
 
-    # Report final statistics with recommendations
+    # Report final statistics
     @info "COMEXT data fetching completed:"
-    @info "  Total datasets: $(stats[:total_datasets])"
-    @info "  Successfully processed: $(stats[:successful]) ($(round(stats[:successful]/stats[:total_datasets]*100, digits=1))%)"
-    @info "  Failed: $(stats[:failed])"
+    @info "  Total queries made: $(stats[:total_queries])"
+    @info "  Years successfully processed: $(stats[:successful])"
+    @info "  Failed queries: $(stats[:failed])"
     @info "  Total rows processed: $(stats[:rows_processed])"
 
-    if stats[:successful] == 0
-        @warn "No COMEXT data was successfully fetched!"
-        @info "Recommendations:"
-        @info "1. The ComextAPI package may have dataset compatibility issues"
-        @info "2. Consider using Eurostat bulk download for Comext data:"
-        @info "   https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?dir=comext"
-        @info "3. Check error logs in: $(log_dir)"
-        @info "4. Try with different dataset IDs or years"
-        @info "5. Verify internet connectivity and Eurostat API availability"
-    end
-
     return stats
-end
-
-"""
-    clean_comext_dataframe(df, dataset, year)
-
-Clean and prepare the Comext dataframe for DuckDB storage.
-Handles data type conversions and ensures compatibility.
-"""
-function clean_comext_dataframe(df, dataset, year)
-    if isempty(df)
-        @warn "Empty dataframe for Comext dataset $dataset, year $year"
-        return df
-    end
-
-    @info "Cleaning Comext dataframe with $(nrow(df)) rows and $(ncol(df)) columns"
-
-    # Clean up any problematic columns for DuckDB compatibility
-    for col in names(df)
-        # Handle columns with mixed types
-        if eltype(df[!, col]) == Any
-            @info "Converting Any-type column $col to String for DuckDB compatibility"
-            df[!, col] = [ismissing(x) ? missing : string(x) for x in df[!, col]]
-        end
-
-        # Handle special string values that may cause DuckDB problems
-        if eltype(df[!, col]) >: String
-            # Replace problematic values with missing
-            mask = [x isa String && (x == ":C" || x == ":c" || x == ":" || x == "-" ||
-                                     x == "null" || x == "NULL" || x == "NaN" || x == "Inf" || x == "-Inf") for x in df[!, col]]
-            if any(mask)
-                @info "Replacing $(sum(mask)) special values in column $col with missing"
-                df[mask, col] .= missing
-            end
-        end
-
-        # Handle very large numeric values that might cause DuckDB issues
-        if eltype(df[!, col]) >: Number
-            extremes = filter(x -> !ismissing(x) && x isa Number && (abs(x) > 1e15), df[!, col])
-            if !isempty(extremes)
-                @warn "Column $col has $(length(extremes)) extreme values that might cause issues. Converting to missing."
-                df[!, col] = [ismissing(x) || !(x isa Number) || abs(x) <= 1e15 ? x : missing for x in df[!, col]]
-            end
-        end
-    end
-
-    # Ensure consistent column names (replace spaces and special characters)
-    for old_name in names(df)
-        new_name = replace(string(old_name), r"[^a-zA-Z0-9_]" => "_")
-        if old_name != new_name
-            @info "Renaming column '$old_name' to '$new_name' for database compatibility"
-            rename!(df, old_name => new_name)
-        end
-    end
-
-    @info "Cleaned dataframe now has $(nrow(df)) rows and $(ncol(df)) columns"
-    return df
 end
 
 end # module

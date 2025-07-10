@@ -17,17 +17,17 @@
 #   ./fetch_data.sh "2022-2022"      # Fetches data for 2022 only
 
 # Get years parameter with default value
-YEARS=${1:-"1995-2023"}
+YEARS=${1:-"2002-2023"}
 
 echo "=== CirQuant Raw Data Fetcher ==="
 echo "Fetching data for years: $YEARS"
-echo "Output will be saved to CirQuant-database/raw/CirQuant_1995-2023.duckdb"
+echo "Output will be saved to CirQuant-database/raw/CirQuant_2002-2023.duckdb"
 echo
 
 # Run the Julia script
-julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_prodcom_data(\"$YEARS\")" 2>&1 | tee prodcom.log
+#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_prodcom_data(\"$YEARS\")" 2>&1 | tee prodcom.log
 #julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_comext_data(\"$YEARS\")" 2>&1 | tee comext.log
-#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee combined_fetch.log
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee combined_fetch.log
 
 echo
 echo "Process completed. Log saved to combined_fetch.log"
