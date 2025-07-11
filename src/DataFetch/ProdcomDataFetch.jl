@@ -14,7 +14,7 @@ Data is saved to DuckDB tables in the raw database.
 
 # Arguments
 - `years_range::String`: Year range to fetch (default: "1995-2023")
-- `custom_datasets`: Optional custom datasets to fetch (default: ["ds-056120", "ds-056121"])
+- `custom_datasets`: Optional custom datasets to fetch (default: ["ds-056120"])
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 """
 function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db_path::String)
@@ -33,7 +33,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
     end
 
     # Datasets to fetch
-    datasets = isnothing(custom_datasets) ? ["ds-056120", "ds-056121"] : custom_datasets
+    datasets = isnothing(custom_datasets) ? ["ds-056120"] : custom_datasets
 
     # Define indicators to fetch per dataset
     dataset_indicators = Dict(
@@ -45,7 +45,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
 
     # Track success/failure statistics
     stats = Dict(
-        :total_datasets => length(datasets) * (end_year - start_year + 1),
+        :total_queries => 0,
         :successful => 0,
         :failed => 0,
         :rows_processed => 0
@@ -117,10 +117,11 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                     for indicator in indicators
                         for (idx, prccode) in enumerate(prodcom_codes_no_dots)
                             @info "Fetching $dataset for year $year, indicator: $indicator, PRODCOM: $prccode ($(prodcom_codes[idx]))"
+                            stats[:total_queries] += 1
                             indicator_df = ProdcomAPI.fetch_prodcom_data(dataset, year, indicator; prccode=prccode, verbose=false)
 
                             # Add delay to avoid rate limiting
-                            sleep(0.5)  # 500ms delay between API calls
+                            sleep(5)  # 5 seconds delay between API calls
 
                             if !isnothing(indicator_df) && nrow(indicator_df) > 0
                                 # Add original PRODCOM code with dots for reference
@@ -160,7 +161,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                                 indicator_df = ProdcomAPI.fetch_prodcom_data(dataset, year, indicator; prccode=prccode, verbose=false)
 
                                 # Add delay to avoid rate limiting
-                                sleep(0.5)  # 500ms delay between API calls
+                                sleep(5)  # 5 seconds delay between API calls
 
                                 if !isnothing(indicator_df) && nrow(indicator_df) > 0
                                     # Add original PRODCOM code with dots for reference
@@ -181,6 +182,10 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                             catch e
                                 # Some indicators might not be available for all datasets
                                 @debug "Indicator $indicator not available for $dataset: $e"
+                                stats[:failed] += 1
+
+                                # Add delay even on failure to avoid rate limiting
+                                sleep(10)  # 10 seconds delay after failed requests
                             end
                         end
                     end
@@ -281,7 +286,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                 stats[:failed] += 1
 
                 # Add delay even on failure to avoid rate limiting
-                sleep(1.0)  # 1 second delay after failed requests
+                sleep(10)  # 10 seconds delay after failed requests
 
                 # Create an error log with details - use safer approach to avoid closure serialization issues
                 error_log = joinpath(log_dir, "error_$(dataset)_$(year)_$(round(Int, time())).txt")
@@ -312,8 +317,8 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
 
     # Report final statistics
     @info "PRODCOM data fetching completed:"
-    @info "  Total datasets: $(stats[:total_datasets])"
-    @info "  Successfully processed: $(stats[:successful]) ($(round(stats[:successful]/stats[:total_datasets]*100, digits=1))%)"
+    @info "  Total datasets: $(stats[:total_queries])"
+    @info "  Successfully processed: $(stats[:successful]) ($(round(stats[:successful]/stats[:total_queries]*100, digits=1))%)"
     @info "  Failed: $(stats[:failed])"
     @info "  Total rows processed: $(stats[:rows_processed])"
 

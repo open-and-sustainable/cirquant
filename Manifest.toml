@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.5"
+julia_version = "1.11.6"
 manifest_format = "2.0"
 project_hash = "d9fc0370e45926b56a5482a544e8d36076b910fa"
 
@@ -68,9 +68,9 @@ version = "0.7.8"
 
 [[deps.ComextAPI]]
 deps = ["DataFrames", "Documenter", "HTTP", "JSON3"]
-git-tree-sha1 = "ccdeb92c6f004ff63589c948787db92f1285fcfe"
+git-tree-sha1 = "f7ab753641da71cf58c78ab8ba3905fd33de01b4"
 uuid = "429715f3-a472-491d-9db2-f3c6206abaaa"
-version = "0.0.6"
+version = "0.0.7"
 
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]

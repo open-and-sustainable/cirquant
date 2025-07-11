@@ -16,7 +16,7 @@ Data is saved to DuckDB tables in the raw database.
 
 # Arguments
 - `years_range::String`: Year range to fetch (default: "2002-2023")
-- `custom_datasets`: Ignored - only DS-059341 is used
+- `custom_datasets`: If empty only DS-059341 is used
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 """
 function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String)
@@ -33,7 +33,7 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
     end
 
     # Fixed parameters
-    dataset = "ds-059341"
+    datasets = isnothing(custom_datasets) ? ["ds-059341"] : custom_datasets
     freq = "A"  # Annual frequency
 
     # Define indicators
@@ -87,114 +87,118 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
         :rows_processed => 0
     )
 
-    # Process each year
-    for year in start_year:end_year
-        @info "Processing year: $year"
+    # Process each dataset and year
+    for dataset in datasets
+        @info "Processing dataset: $dataset"
+        # Process each year
+        for year in start_year:end_year
+            @info "Processing year: $year"
 
-        # Collect all data for this year
-        year_data = DataFrame()
+            # Collect all data for this year
+            year_data = DataFrame()
 
-        # Process each HS code
-        for hs_code in unique_hs_codes
-            # Process each indicator
-            for indicator in indicators
-                # Process each partner type
-                for (partner_type, partner_code) in partners
-                    # Process each flow
-                    for (flow_type, flow_code) in flows
-                        @info "Fetching: HS=$hs_code, Indicator=$indicator, Partner=$partner_type, Flow=$flow_type"
-                        stats[:total_queries] += 1
+            # Process each HS code
+            for hs_code in unique_hs_codes
+                # Process each indicator
+                for indicator in indicators
+                    # Process each partner type
+                    for (partner_type, partner_code) in partners
+                        # Process each flow
+                        for (flow_type, flow_code) in flows
+                            @info "Fetching: HS=$hs_code, Indicator=$indicator, Partner=$partner_type, Flow=$flow_type"
+                            stats[:total_queries] += 1
 
-                        # Log the exact API call parameters
-                        @info "API call parameters:" dataset=dataset year=year indicator=indicator product=hs_code freq=freq partner=partner_code flow=flow_code
-                        @info "Expected API call: fetch_comext_data(\"$dataset\", $year, \"$indicator\", \"$hs_code\", \"$freq\", \"$partner_code\", $flow_code)"
+                            # Log the exact API call parameters
+                            #@info "API call parameters:" dataset=dataset year=year indicator=indicator product=hs_code freq=freq partner=partner_code flow=flow_code
+                            #@info "Expected API call: fetch_comext_data(\"$dataset\", $year, \"$indicator\", \"$hs_code\", \"$freq\", \"$partner_code\", $flow_code)"
 
-                        try
-                            # Fetch data using ComextAPI
-                            df = ComextAPI.fetch_comext_data(
-                                dataset,
-                                year,
-                                indicator,
-                                hs_code,
-                                freq,
-                                partner_code,
-                                flow_code
-                            )
+                            try
+                                # Fetch data using ComextAPI
+                                df = ComextAPI.fetch_comext_data(
+                                    dataset,
+                                    year,
+                                    indicator,
+                                    hs_code,
+                                    freq,
+                                    partner_code,
+                                    flow_code
+                                )
 
-                            # Add delay to avoid rate limiting
-                            sleep(0.5)  # 500ms delay between API calls
+                                # Add delay to avoid rate limiting
+                                sleep(5)  # 5 seconds delay between API calls
 
-                            if !isnothing(df) && nrow(df) > 0
-                                # Add metadata columns for clarity
-                                df[!, :hs_code_query] .= hs_code
-                                df[!, :indicator_query] .= indicator
-                                df[!, :partner_type] .= partner_type
-                                df[!, :partner_code] .= partner_code
-                                df[!, :flow_type] .= flow_type
-                                df[!, :flow_code] .= flow_code
-                                df[!, :fetch_date] .= now()
+                                if !isnothing(df) && nrow(df) > 0
+                                    # Add metadata columns for clarity
+                                    df[!, :hs_code_query] .= hs_code
+                                    df[!, :indicator_query] .= indicator
+                                    df[!, :partner_type] .= partner_type
+                                    df[!, :partner_code] .= partner_code
+                                    df[!, :flow_type] .= flow_type
+                                    df[!, :flow_code] .= flow_code
+                                    df[!, :fetch_date] .= now()
 
-                                # Convert value columns to strings to handle mixed types
-                                if hasproperty(df, :value)
-                                    df[!, :value] = string.(df.value)
-                                end
+                                    # Convert value columns to strings to handle mixed types
+                                    if hasproperty(df, :value)
+                                        df[!, :value] = string.(df.value)
+                                    end
 
-                                # Append to year data
-                                if nrow(year_data) == 0
-                                    year_data = df
+                                    # Append to year data
+                                    if nrow(year_data) == 0
+                                        year_data = df
+                                    else
+                                        year_data = vcat(year_data, df, cols=:union)
+                                    end
+
+                                    @info "Retrieved $(nrow(df)) rows"
                                 else
-                                    year_data = vcat(year_data, df, cols=:union)
+                                    @debug "No data for combination"
                                 end
 
-                                @info "Retrieved $(nrow(df)) rows"
-                            else
-                                @debug "No data for combination"
+                            catch e
+                                @warn "Failed to fetch data" hs_code indicator partner_type flow_type exception=e
+                                stats[:failed] += 1
+
+                                # Add delay even on failure to avoid rate limiting
+                                sleep(10)  # 10 seconds delay after failed requests
                             end
-
-                        catch e
-                            @warn "Failed to fetch data" hs_code indicator partner_type flow_type exception=e
-                            stats[:failed] += 1
-
-                            # Add delay even on failure to avoid rate limiting
-                            sleep(1.0)  # 1 second delay after failed requests
                         end
                     end
                 end
             end
-        end
 
-        # Save the collected data for this year
-        if nrow(year_data) > 0
-            table_name = "comext_$(replace(dataset, "-" => "_"))_$year"
-
-            try
-                # Write to database
-                @info "Writing $(nrow(year_data)) rows to table $table_name"
-                write_large_duckdb_table!(year_data, db_path, table_name)
-
-                stats[:successful] += 1
-                stats[:rows_processed] += nrow(year_data)
-                @info "✓ Successfully saved data to table $table_name"
-
-            catch e
-                @error "Failed to write data to database" table=table_name exception=e
-                stats[:failed] += 1
-
-                # Save as backup CSV
-                backup_dir = joinpath(db_dir, "..", "logs", "backups")
-                mkpath(backup_dir)
-                backup_file = joinpath(backup_dir, "backup_$(table_name)_$(round(Int, time())).csv")
+            # Save the collected data for this year
+            if nrow(year_data) > 0
+                table_name = "comext_$(replace(dataset, "-" => "_"))_$year"
 
                 try
-                    CSV.write(backup_file, year_data)
-                    @info "Saved backup to $backup_file"
-                catch csv_err
-                    @error "Failed to save backup CSV" exception=csv_err
+                    # Write to database
+                    @info "Writing $(nrow(year_data)) rows to table $table_name"
+                    write_large_duckdb_table!(year_data, db_path, table_name)
+
+                    stats[:successful] += 1
+                    stats[:rows_processed] += nrow(year_data)
+                    @info "✓ Successfully saved data to table $table_name"
+
+                catch e
+                    @error "Failed to write data to database" table=table_name exception=e
+                    stats[:failed] += 1
+
+                    # Save as backup CSV
+                    backup_dir = joinpath(db_dir, "..", "logs", "backups")
+                    mkpath(backup_dir)
+                    backup_file = joinpath(backup_dir, "backup_$(table_name)_$(round(Int, time())).csv")
+
+                    try
+                        CSV.write(backup_file, year_data)
+                        @info "Saved backup to $backup_file"
+                    catch csv_err
+                        @error "Failed to save backup CSV" exception=csv_err
+                    end
                 end
+            else
+                @warn "No data collected for year $year"
+                stats[:failed] += 1
             end
-        else
-            @warn "No data collected for year $year"
-            stats[:failed] += 1
         end
     end
 
