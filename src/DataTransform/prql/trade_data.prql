@@ -12,6 +12,8 @@ derive {
     volume_tonnes = s"CASE WHEN indicators = 'QUANTITY_KG' THEN TRY_CAST(value AS DOUBLE) * 0.001 ELSE NULL END",
     # Ensure product code is clean (HS code)
     product_code_clean = s"TRIM(product)",
+    # Map time column to year
+    year = s"time",
     # Identify flow type (flow column contains numeric codes)
     is_import = s"CASE WHEN flow = '1' THEN 1 ELSE 0 END",
     is_export = s"CASE WHEN flow = '2' THEN 1 ELSE 0 END"

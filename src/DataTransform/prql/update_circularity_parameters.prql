@@ -1,0 +1,51 @@
+# PRQL query for recalculating circularity parameters
+# This creates a new version of the circularity indicators table with updated parameters
+# Note: PRQL doesn't support UPDATE, so we recreate the table with new values
+
+from ci = circularity_indicators_{{YEAR}}
+# Join with circularity parameters based on product code to get product-specific rates
+join pcr = parameters_circularity_rate (ci.product_code == pcr.product_code)
+
+# Apply the circularity rates and calculate savings
+derive {
+    # Override with new product-specific circularity rates from parameters_circularity_rate table
+    current_circularity_rate_pct = pcr.current_circularity_rate,
+    potential_circularity_rate_pct = pcr.potential_circularity_rate,
+
+    # Calculate estimated savings based on the difference in rates
+    estimated_material_savings_tonnes = s"""
+        CASE
+            WHEN apparent_consumption_tonnes > 0
+            THEN apparent_consumption_tonnes * (pcr.potential_circularity_rate - pcr.current_circularity_rate) / 100.0
+            ELSE 0.0
+        END
+    """,
+
+    estimated_monetary_savings_eur = s"""
+        CASE
+            WHEN apparent_consumption_value_eur > 0
+            THEN apparent_consumption_value_eur * (pcr.potential_circularity_rate - pcr.current_circularity_rate) / 100.0
+            ELSE 0.0
+        END
+    """
+}
+
+# Select all columns with the updated values
+select {
+    product_code = ci.product_code,
+    year = ci.year,
+    geo = ci.geo,
+    level = ci.level,
+    production_volume_tonnes = ci.production_volume_tonnes,
+    production_value_eur = ci.production_value_eur,
+    import_volume_tonnes = ci.import_volume_tonnes,
+    import_value_eur = ci.import_value_eur,
+    export_volume_tonnes = ci.export_volume_tonnes,
+    export_value_eur = ci.export_value_eur,
+    apparent_consumption_tonnes = ci.apparent_consumption_tonnes,
+    apparent_consumption_value_eur = ci.apparent_consumption_value_eur,
+    current_circularity_rate_pct,
+    potential_circularity_rate_pct,
+    estimated_material_savings_tonnes,
+    estimated_monetary_savings_eur
+}

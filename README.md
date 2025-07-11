@@ -11,6 +11,7 @@ Detailed documentation is available in the [`docs/`](docs/) folder:
 - **[Data Sources](docs/data-sources.md)**: Details about PRODCOM and COMEXT datasets, indicators, and known issues
 - **[Raw Database Schema](docs/database-schema-raw.md)**: Structure of the raw data tables (PRODCOM/COMEXT)
 - **[Processed Database Schema](docs/database-schema-processed.md)**: Structure of the transformed analysis tables
+- **[Parameters Reference](docs/parameters-reference.md)**: Guide to configuring ANALYSIS_PARAMETERS (metadata, structure, validation)
 
 ## Architecture Overview
 
@@ -135,6 +136,34 @@ results = CircularityProcessor.process_year_data(
     prql_files=prql_files,
     replace=true
 )
+```
+
+### Parameter Management
+
+CirQuant uses a centralized `ANALYSIS_PARAMETERS` constant to manage all analysis parameters, avoiding hardcoded values and ensuring reproducibility. This constant is defined in the main CirQuant module and contains:
+
+- **Circularity rates**: Current and potential material recirculation percentages
+- **Product weights**: Conversion factors for different units (pieces to tonnes)
+- **Trade parameters**: Intra-EU vs Extra-EU trade distribution assumptions
+- **Recovery efficiency**: Material recovery rates by recycling method
+
+These parameters are automatically stored in the processed database during transformation, creating parameter tables that:
+- Enable exact reproduction of analysis results
+- Track parameter changes over time
+- Support scenario comparisons
+
+Example of accessing parameters:
+```julia
+# View default analysis parameters
+CirQuant.ANALYSIS_PARAMETERS
+
+# Parameters are automatically used during processing
+process_raw_to_processed()  # Uses ANALYSIS_PARAMETERS internally
+
+# Parameter tables created in processed database:
+# - parameters_circularity_rate
+# - parameters_trade_share
+# - parameters_recovery_efficiency
 ```
 
 ### Raw Database Structure

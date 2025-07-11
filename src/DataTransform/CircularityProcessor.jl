@@ -6,7 +6,7 @@ using Dates
 
 # Import necessary modules from parent
 using ..DatabaseAccess
-using ..ProductConversionTables
+using ..AnalysisConfigLoader
 
 # Include the unit converter modules
 include("UnitConversion/UnitConverter.jl")
@@ -86,11 +86,8 @@ function create_circularity_table(year::Int; db_path::String, replace::Bool=fals
         con = DBInterface.connect(db_conn)
 
         # Check if table exists
-        result = DBInterface.execute(con,
-            "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = '$table_name'"
-        ) |> DataFrame
-
-        if result.cnt[1] > 0
+        # Check if table already exists
+        if DatabaseAccess.table_exists(db_path, table_name)
             if replace
                 @info "Table '$table_name' exists. Dropping and recreating..."
                 DBInterface.execute(con, "DROP TABLE IF EXISTS $table_name")
@@ -194,11 +191,7 @@ function validate_circularity_table(year::Int; db_path::String)
         con = DBInterface.connect(db_conn)
 
         # Check if table exists
-        result = DBInterface.execute(con,
-            "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = '$table_name'"
-        ) |> DataFrame
-
-        if result.cnt[1] == 0
+        if !DatabaseAccess.table_exists(db_path, table_name)
             @warn "Table '$table_name' does not exist"
             DBInterface.close!(con)
             DBInterface.close!(db_conn)
@@ -208,11 +201,8 @@ function validate_circularity_table(year::Int; db_path::String)
         validation_result[:exists] = true
 
         # Get table columns
-        columns_df = DBInterface.execute(con,
-            "SELECT column_name FROM information_schema.columns WHERE table_name = '$table_name'"
-        ) |> DataFrame
-
-        existing_columns = Set(columns_df.column_name)
+        column_names = DatabaseAccess.get_table_columns(db_path, table_name)
+        actual_columns = Set(column_names)
 
         # Define required columns
         required_columns = Set([
@@ -226,7 +216,7 @@ function validate_circularity_table(year::Int; db_path::String)
         ])
 
         # Check for missing columns
-        missing = setdiff(required_columns, existing_columns)
+        missing = setdiff(required_columns, actual_columns)
         validation_result[:missing_columns] = collect(missing)
         validation_result[:has_correct_columns] = isempty(missing)
 
@@ -327,7 +317,7 @@ Loads the product conversion/mapping table from the processed database.
 function load_product_mapping(db_path::String)
     try
         @info "Loading product mapping table from database"
-        mapping_df = ProductConversionTables.read_product_conversion_table(db_path)
+        mapping_df = AnalysisConfigLoader.read_product_conversion_table(db_path)
 
         if isnothing(mapping_df)
             @error "Failed to load product mapping table"
@@ -640,15 +630,8 @@ function inspect_raw_tables(db_path::String, year::Int; show_sample::Bool=false)
             @info "Inspecting table: $table_name"
 
             # Check if table exists
-            exists_query = """
-            SELECT COUNT(*) as cnt
-            FROM information_schema.tables
-            WHERE table_name = '$table_name'
-            """
-
-            exists_result = DBInterface.execute(con, exists_query) |> DataFrame
-
-            if exists_result.cnt[1] == 0
+            # Check if table exists using centralized function
+            if !DatabaseAccess.table_exists(db_path, table_name)
                 @warn "Table $table_name does not exist"
                 results[table_name] = Dict("exists" => false)
                 continue

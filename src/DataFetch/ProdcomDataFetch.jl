@@ -2,7 +2,7 @@ module ProdcomDataFetch
 
 using DataFrames, Dates, DuckDB, CSV, ComextAPI, ProdcomAPI
 using ..DatabaseAccess: write_large_duckdb_table!, recreate_duckdb_database
-using ..ProductConversionTables: get_product_mapping_data
+using ..AnalysisConfigLoader: load_product_mappings
 
 export fetch_prodcom_data
 
@@ -104,8 +104,8 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                     indicators = dataset_indicators[dataset]
                     @info "Fetching $dataset for year $year with indicators: $indicators"
 
-                    # Get PRODCOM codes from ProductConversionTables
-                    product_mapping = get_product_mapping_data()
+                    # Get PRODCOM codes from AnalysisConfigLoader
+                    product_mapping = load_product_mappings()
                     prodcom_codes = unique(product_mapping.prodcom_code)
 
                     # Remove dots from PRODCOM codes for API submission
@@ -142,8 +142,8 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                         end
                     end
                 else
-                    # Get PRODCOM codes from ProductConversionTables
-                    product_mapping = get_product_mapping_data()
+                    # Get PRODCOM codes from AnalysisConfigLoader
+                    product_mapping = load_product_mappings()
                     prodcom_codes = unique(product_mapping.prodcom_code)
 
                     # Remove dots from PRODCOM codes for API submission

@@ -135,6 +135,53 @@ Automated fetching from Eurostat APIs with:
 - Indicator calculations
 - Export to various formats for reporting
 
+## Parameter Management
+
+### ANALYSIS_PARAMETERS Constant
+
+To avoid hardcoding values and ensure reproducibility, the system uses a centralized `ANALYSIS_PARAMETERS` constant defined in the main CirQuant.jl module. This approach provides:
+
+1. **Centralized configuration**: All analysis parameters in one place
+2. **Traceability**: Parameters are stored in the processed database
+3. **Flexibility**: Easy to update parameters without modifying code
+4. **Transparency**: Clear record of assumptions used in analysis
+
+The `ANALYSIS_PARAMETERS` dictionary contains:
+
+- **Current circularity rates**: Existing material recirculation percentages by product
+- **Potential circularity rates**: Achievable rates with best practices/innovations
+- **Product weights**: Conversion factors for units to tonnes (e.g., pieces to kg)
+- **Recovery efficiency**: Material recovery rates by recycling method
+
+### Parameter Storage in Database
+
+During processing, these parameters are automatically stored in the processed database as parameter tables:
+
+1. **`parameters_circularity_rate`**: Contains product-specific circularity rates for each product
+2. **`parameters_recovery_efficiency`**: Recycling method effectiveness rates
+
+This ensures that:
+- Analysis results can be reproduced exactly
+- Parameter changes are tracked over time
+- Different scenarios can be compared
+
+### Parameter Usage in PRQL Queries
+
+The parameters are accessed within PRQL transformation queries through joins with parameter tables. For example, the `update_circularity_parameters.prql` query:
+
+```prql
+from ci = circularity_indicators_{{YEAR}}
+join pcr = parameters_circularity_rate (ci.product_code == pcr.product_code)
+derive {
+    current_circularity_rate_pct = pcr.current_circularity_rate,
+    potential_circularity_rate_pct = pcr.potential_circularity_rate,
+    estimated_material_savings_tonnes = apparent_consumption_tonnes * 
+        (pcr.potential_circularity_rate - pcr.current_circularity_rate) / 100.0
+}
+```
+
+This approach allows dynamic recalculation of indicators when parameters are updated.
+
 ## Limitations and Assumptions
 
 ### Data Limitations

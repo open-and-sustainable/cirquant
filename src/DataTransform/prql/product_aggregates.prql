@@ -1,214 +1,179 @@
-# PRQL query for calculating product-level EU aggregates
-# This query aggregates data across all EU member states to create EU-wide product statistics
-# Distinguishes between intra-EU and extra-EU trade flows
-
-# Define EU27 member states
-let eu27_countries = [
-    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
-    "DE", "EL", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
-    "PL", "PT", "RO", "SK", "SI", "ES", "SE"
-]
+# PRQL query for calculating product-level aggregates by geographic entity
+# This query aggregates data by product and geography without artificial EU aggregation
+# Works for any geo level: individual countries or EU27
 
 # Start with the base circularity indicators data
 from circularity_indicators_{{YEAR}}
-# Filter for EU countries only (exclude aggregate EU27 to avoid double counting)
-filter geo != "EU27" && s"geo IN (${eu27_countries.join(', ')})"
 
-# First, aggregate by product to get EU totals
-group {product_code, product_name, year} (
+# Group by product and geography to create aggregates
+group {product_code, geo, year} (
     aggregate {
-        # Total EU production
-        eu_production_tonnes = sum production_volume_tonnes,
-        eu_production_value_eur = sum production_value_eur,
+        # Production aggregates
+        total_production_tonnes = sum production_volume_tonnes,
+        total_production_value_eur = sum production_value_eur,
 
-        # Total imports (will split into intra/extra later)
+        # Import aggregates
         total_imports_tonnes = sum import_volume_tonnes,
         total_imports_value_eur = sum import_value_eur,
 
-        # Total exports (will split into intra/extra later)
+        # Export aggregates
         total_exports_tonnes = sum export_volume_tonnes,
         total_exports_value_eur = sum export_value_eur,
 
-        # Count of EU countries producing this product
-        producing_countries = count_distinct (case [
-            production_volume_tonnes > 0 => geo,
-            true => null
-        ]),
+        # Apparent consumption aggregates
+        total_apparent_consumption_tonnes = sum apparent_consumption_tonnes,
+        total_apparent_consumption_value_eur = sum apparent_consumption_value_eur,
 
-        # Count of EU countries trading this product
-        importing_countries = count_distinct (case [
-            import_volume_tonnes > 0 => geo,
-            true => null
-        ]),
+        # Circularity metrics (take max since all rows in group should have same values)
+        current_circularity_rate = max current_circularity_rate_pct,
+        potential_circularity_rate = max potential_circularity_rate_pct,
+        total_material_savings_tonnes = sum estimated_material_savings_tonnes,
+        total_monetary_savings_eur = sum estimated_monetary_savings_eur,
 
-        exporting_countries = count_distinct (case [
-            export_volume_tonnes > 0 => geo,
-            true => null
-        ])
+        # Count of data points (useful for data quality)
+        data_points = count product_code
     }
 )
 
-# Now we need to get intra-EU vs extra-EU trade splits
-# This would come from COMEXT data with partner information
-# For now, we'll use estimated splits based on typical patterns
+# Calculate derived indicators
 derive {
-    # Estimate intra-EU vs extra-EU trade splits
-    # In reality, this should come from COMEXT partner data
-    # Using typical EU trade patterns: ~60% of trade is intra-EU
-    intra_eu_trade_share = 0.6,
-    extra_eu_trade_share = 0.4,
+    # Trade balance
+    trade_balance_tonnes = total_exports_tonnes - total_imports_tonnes,
+    trade_balance_value_eur = total_exports_value_eur - total_imports_value_eur,
 
-    # Apply splits to imports
-    eu_imports_intra_tonnes = total_imports_tonnes * intra_eu_trade_share,
-    eu_imports_extra_tonnes = total_imports_tonnes * extra_eu_trade_share,
-    eu_imports_intra_value_eur = total_imports_value_eur * intra_eu_trade_share,
-    eu_imports_extra_value_eur = total_imports_value_eur * extra_eu_trade_share,
-
-    # Apply splits to exports
-    eu_exports_intra_tonnes = total_exports_tonnes * intra_eu_trade_share,
-    eu_exports_extra_tonnes = total_exports_tonnes * extra_eu_trade_share,
-    eu_exports_intra_value_eur = total_exports_value_eur * intra_eu_trade_share,
-    eu_exports_extra_value_eur = total_exports_value_eur * extra_eu_trade_share
-}
-
-# Calculate EU-level apparent consumption
-# For EU as a whole: Production + Extra-EU imports - Extra-EU exports
-derive {
-    eu_apparent_consumption_tonnes = s"""
-        eu_production_tonnes +
-        eu_imports_extra_tonnes -
-        eu_exports_extra_tonnes
-    """,
-
-    eu_apparent_consumption_value_eur = s"""
-        eu_production_value_eur +
-        eu_imports_extra_value_eur -
-        eu_exports_extra_value_eur
-    """,
-
-    # EU self-sufficiency ratio
-    eu_self_sufficiency_ratio = s"""
+    # Self-sufficiency ratio
+    self_sufficiency_ratio = s"""
         CASE
-            WHEN eu_apparent_consumption_tonnes > 0
-            THEN eu_production_tonnes / eu_apparent_consumption_tonnes
+            WHEN total_apparent_consumption_tonnes > 0
+            THEN total_production_tonnes / total_apparent_consumption_tonnes
             ELSE NULL
         END
     """,
 
-    # Extra-EU trade balance
-    eu_trade_balance_extra_tonnes = eu_exports_extra_tonnes - eu_imports_extra_tonnes,
-    eu_trade_balance_extra_value_eur = eu_exports_extra_value_eur - eu_imports_extra_value_eur,
-
-    # EU market concentration (Herfindahl index approximation)
-    # Based on number of producing countries
-    market_concentration_index = s"""
+    # Import dependency
+    import_dependency_ratio = s"""
         CASE
-            WHEN producing_countries > 0
-            THEN 1.0 / producing_countries
+            WHEN (total_production_tonnes + total_imports_tonnes) > 0
+            THEN total_imports_tonnes / (total_production_tonnes + total_imports_tonnes)
             ELSE NULL
         END
     """,
 
-    # Average unit values at EU level
-    eu_avg_production_unit_value = s"""
+    # Export intensity
+    export_intensity_ratio = s"""
         CASE
-            WHEN eu_production_tonnes > 0
-            THEN eu_production_value_eur / eu_production_tonnes
+            WHEN total_production_tonnes > 0
+            THEN total_exports_tonnes / total_production_tonnes
             ELSE NULL
         END
     """,
 
-    eu_avg_import_unit_value = s"""
+    # Average unit values
+    avg_production_unit_value = s"""
         CASE
-            WHEN eu_imports_extra_tonnes > 0
-            THEN eu_imports_extra_value_eur / eu_imports_extra_tonnes
+            WHEN total_production_tonnes > 0
+            THEN total_production_value_eur / total_production_tonnes
             ELSE NULL
         END
     """,
 
-    eu_avg_export_unit_value = s"""
+    avg_import_unit_value = s"""
         CASE
-            WHEN eu_exports_extra_tonnes > 0
-            THEN eu_exports_extra_value_eur / eu_exports_extra_tonnes
+            WHEN total_imports_tonnes > 0
+            THEN total_imports_value_eur / total_imports_tonnes
             ELSE NULL
         END
-    """
-}
+    """,
 
-# Add product strategic importance indicators
-derive {
-    # Strategic importance based on import dependency
+    avg_export_unit_value = s"""
+        CASE
+            WHEN total_exports_tonnes > 0
+            THEN total_exports_value_eur / total_exports_tonnes
+            ELSE NULL
+        END
+    """,
+
+    # Trade intensity (total trade relative to domestic activity)
+    trade_intensity = s"""
+        CASE
+            WHEN (total_production_tonnes + total_imports_tonnes) > 0
+            THEN (total_imports_tonnes + total_exports_tonnes) /
+                 (total_production_tonnes + total_imports_tonnes)
+            ELSE NULL
+        END
+    """,
+
+    # Strategic importance classification
     strategic_importance = s"""
         CASE
-            WHEN eu_self_sufficiency_ratio < 0.3 AND eu_apparent_consumption_tonnes > 10000
+            WHEN self_sufficiency_ratio < 0.3 AND total_apparent_consumption_tonnes > 10000
                 THEN 'critical_import_dependency'
-            WHEN eu_self_sufficiency_ratio < 0.5
+            WHEN self_sufficiency_ratio < 0.5
                 THEN 'high_import_dependency'
-            WHEN eu_self_sufficiency_ratio > 1.5
+            WHEN self_sufficiency_ratio > 1.5
                 THEN 'export_oriented'
-            WHEN eu_self_sufficiency_ratio >= 0.9 AND eu_self_sufficiency_ratio <= 1.1
+            WHEN self_sufficiency_ratio >= 0.9 AND self_sufficiency_ratio <= 1.1
                 THEN 'self_sufficient'
+            WHEN self_sufficiency_ratio IS NULL
+                THEN 'no_data'
             ELSE 'moderate_dependency'
         END
     """,
 
-    # Trade intensity indicator
-    trade_intensity = s"""
-        (eu_imports_extra_tonnes + eu_exports_extra_tonnes) /
-        NULLIF(eu_production_tonnes + eu_imports_extra_tonnes, 0)
-    """,
-
-    # Market coverage (% of EU countries involved)
-    eu_market_coverage = s"""
-        CAST(producing_countries AS DOUBLE) / 27.0
-    """
+    # Data quality indicator
+    has_production_data = s"total_production_tonnes > 0",
+    has_trade_data = s"(total_imports_tonnes > 0 OR total_exports_tonnes > 0)"
 }
 
 # Select final fields for product aggregates table
 select {
     product_code,
-    product_name,
+    geo,
     year,
 
     # Production
-    eu_production_tonnes,
-    eu_production_value_eur,
+    total_production_tonnes,
+    total_production_value_eur,
 
-    # Trade flows
-    eu_imports_intra_tonnes,
-    eu_imports_extra_tonnes,
-    eu_imports_intra_value_eur,
-    eu_imports_extra_value_eur,
-    eu_exports_intra_tonnes,
-    eu_exports_extra_tonnes,
-    eu_exports_intra_value_eur,
-    eu_exports_extra_value_eur,
+    # Trade
+    total_imports_tonnes,
+    total_imports_value_eur,
+    total_exports_tonnes,
+    total_exports_value_eur,
 
     # Apparent consumption
-    eu_apparent_consumption_tonnes,
-    eu_apparent_consumption_value_eur,
+    total_apparent_consumption_tonnes,
+    total_apparent_consumption_value_eur,
 
-    # Derived indicators
-    eu_self_sufficiency_ratio,
-    eu_trade_balance_extra_tonnes,
-    eu_trade_balance_extra_value_eur,
-    market_concentration_index,
+    # Trade indicators
+    trade_balance_tonnes,
+    trade_balance_value_eur,
+
+    # Ratios and indicators
+    self_sufficiency_ratio,
+    import_dependency_ratio,
+    export_intensity_ratio,
     trade_intensity,
 
     # Unit values
-    eu_avg_production_unit_value,
-    eu_avg_import_unit_value,
-    eu_avg_export_unit_value,
+    avg_production_unit_value,
+    avg_import_unit_value,
+    avg_export_unit_value,
 
-    # Market structure
-    producing_countries,
-    importing_countries,
-    exporting_countries,
-    eu_market_coverage,
+    # Circularity metrics
+    current_circularity_rate,
+    potential_circularity_rate,
+    total_material_savings_tonnes,
+    total_monetary_savings_eur,
 
     # Strategic classification
-    strategic_importance
+    strategic_importance,
+
+    # Data quality
+    data_points,
+    has_production_data,
+    has_trade_data
 }
 
-# Sort by product code for consistent output
-sort {product_code}
+# Sort by product code and geo for consistent output
+sort {product_code, geo}

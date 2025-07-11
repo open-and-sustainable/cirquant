@@ -11,13 +11,17 @@ derive {
     production_volume_tonnes = s"CASE WHEN indicators = 'PRODQNT' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
     production_value_eur = s"CASE WHEN indicators = 'PRODVAL' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
     # Ensure product code is clean
-    product_code_clean = s"TRIM(prccode)"
+    product_code_clean = s"TRIM(prccode)",
+    # Map time column to year
+    year = s"time",
+    # Derive level based on geo
+    level = s"CASE WHEN decl = 'EU27' THEN 'EU' ELSE 'country' END"
 }
 select {
     product_code = product_code_clean,
     year,
     geo = decl,
-    level = s"CASE WHEN decl = 'EU27' THEN 'EU' ELSE 'country' END",
+    level,
     production_volume_tonnes,
     production_value_eur
 }

@@ -2,14 +2,14 @@ module ComextDataFetch
 
 using DataFrames, Dates, DuckDB, CSV, ComextAPI
 using ..DatabaseAccess: write_large_duckdb_table!
-using ..ProductConversionTables: get_product_mapping_data
+using ..AnalysisConfigLoader: load_product_mappings
 
 export fetch_comext_data
 
 """
     fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String)
 
-Fetches COMEXT data from Eurostat API for dataset DS-059341 using HS codes from ProductConversionTables.
+Fetches COMEXT data from Eurostat API for dataset DS-059341 using HS codes from AnalysisConfigLoader.
 Fetches VALUE_EUR and QUANTITY_KG indicators for both imports and exports,
 for intra-EU and extra-EU trade.
 Data is saved to DuckDB tables in the raw database.
@@ -59,8 +59,8 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
         mkpath(db_dir)
     end
 
-    # Get HS codes from ProductConversionTables
-    product_mapping = get_product_mapping_data()
+    # Get HS codes from AnalysisConfigLoader
+    product_mapping = load_product_mappings()
 
     # Extract and process unique HS codes
     all_hs_codes = Set{String}()

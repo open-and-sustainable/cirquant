@@ -4,7 +4,7 @@ using DuckDB, DBInterface
 using DataFrames, CSV
 import Dates: Date, DateTime
 
-export write_duckdb_table!, write_large_duckdb_table!, executePRQL, recreate_duckdb_database
+export write_duckdb_table!, write_large_duckdb_table!, executePRQL, recreate_duckdb_database, table_exists, get_table_columns
 
 # --- helpers ---------------------------------------------------------------
 
@@ -25,12 +25,8 @@ function table_info(db_path::AbstractString, table_name::AbstractString)
     con = DBInterface.connect(db)
 
     try
-        # Check if table exists
-        result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.tables WHERE table_name = '$table_name'")
-        result_df = DataFrames.DataFrame(result)
-        exists = result_df[1, :n] > 0
-
-        if !exists
+        # Check if table exists using centralized function
+        if !table_exists(db_path, table_name)
             return (missing, missing)
         end
 
@@ -39,12 +35,105 @@ function table_info(db_path::AbstractString, table_name::AbstractString)
         result_df = DataFrames.DataFrame(result)
         rows = result_df[1, :n]
 
-        # Get column count
-        result = DuckDB.query(con, "SELECT count(*) AS n FROM information_schema.columns WHERE table_name = '$table_name'")
-        result_df = DataFrames.DataFrame(result)
-        cols = result_df[1, :n]
+        # Get column count using centralized function
+        column_names = get_table_columns(db_path, table_name)
+        cols = length(column_names)
 
         return (rows, cols)
+    finally
+        DBInterface.close!(con)
+        DBInterface.close!(db)
+    end
+end
+
+"""
+    table_exists(db_path::String, table_name::String) → Bool
+
+Check if a table exists in the DuckDB database.
+
+# Arguments
+- `db_path`: Path to the DuckDB database file
+- `table_name`: Name of the table to check
+
+# Returns
+- `true` if table exists, `false` otherwise
+
+# Example
+```julia
+if table_exists("mydb.duckdb", "product_data")
+    println("Table exists!")
+end
+```
+"""
+function table_exists(db_path::String, table_name::String)::Bool
+    db = DuckDB.DB(db_path)
+    con = DBInterface.connect(db)
+
+    try
+        # Use parameterized query to avoid SQL injection
+        query = """
+            SELECT COUNT(*) as cnt
+            FROM information_schema.tables
+            WHERE table_name = ?
+        """
+
+        # Execute with parameter binding
+        stmt = DBInterface.prepare(con, query)
+        result = DBInterface.execute(stmt, [table_name]) |> DataFrame
+
+        return result.cnt[1] > 0
+    catch e
+        @error "Error checking table existence" exception=e table=table_name
+        return false
+    finally
+        DBInterface.close!(con)
+        DBInterface.close!(db)
+    end
+end
+
+"""
+    get_table_columns(db_path::String, table_name::String) → Vector{String}
+
+Get the column names of a table in the DuckDB database.
+
+# Arguments
+- `db_path`: Path to the DuckDB database file
+- `table_name`: Name of the table
+
+# Returns
+- Vector of column names, or empty vector if table doesn't exist
+
+# Example
+```julia
+columns = get_table_columns("mydb.duckdb", "product_data")
+println("Columns: ", join(columns, ", "))
+```
+"""
+function get_table_columns(db_path::String, table_name::String)::Vector{String}
+    db = DuckDB.DB(db_path)
+    con = DBInterface.connect(db)
+
+    try
+        # First check if table exists
+        if !table_exists(db_path, table_name)
+            return String[]
+        end
+
+        # Get column names
+        query = """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = ?
+            ORDER BY ordinal_position
+        """
+
+        stmt = DBInterface.prepare(con, query)
+        result = DBInterface.execute(stmt, [table_name]) |> DataFrame
+
+        return result.column_name
+    catch e
+        @error "Error getting table columns" exception=e table=table_name
+        return String[]
     finally
         DBInterface.close!(con)
         DBInterface.close!(db)

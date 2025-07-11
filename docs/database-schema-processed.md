@@ -88,6 +88,32 @@ Pre-calculated product-level EU aggregates.
 | eu_exports_extra_tonnes | DOUBLE | Extra-EU exports |
 | eu_apparent_consumption_tonnes | DOUBLE | EU-wide apparent consumption |
 
+## Parameter Tables
+
+These tables store the analysis parameters used during processing, ensuring reproducibility and traceability.
+
+### Table: `parameters_circularity_rate`
+
+Stores product-specific circularity rate assumptions used in calculations.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots (e.g., "28211330") |
+| current_circularity_rate | DOUBLE | Current material recirculation rate for this product (%) |
+| potential_circularity_rate | DOUBLE | Achievable rate with innovations for this product (%) |
+| last_updated | VARCHAR | Timestamp of last parameter update |
+
+### Table: `parameters_recovery_efficiency`
+
+Material recovery efficiency rates by recycling method (if configured).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| method | VARCHAR | Recycling/recovery method name |
+| efficiency_rate | DOUBLE | Recovery efficiency (0-1) |
+| material_type | VARCHAR | Type of material (optional) |
+| notes | VARCHAR | Additional method details |
+
 ## Data Transformations Applied
 
 ### Unit Harmonization

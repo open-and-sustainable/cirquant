@@ -1,0 +1,69 @@
+# PRQL query for creating circularity indicators table
+# This combines production and trade data to calculate apparent consumption
+# and prepare the structure for circularity metrics
+
+# Start with production data aliased as 'p'
+from p = production_temp_{{YEAR}}
+# Full outer join with trade data aliased as 't'
+join side:full t = trade_temp_{{YEAR}} (p.product_code == t.product_code && p.geo == t.geo)
+# Join with circularity parameters based on product code to get product-specific rates
+join side:left pcr = parameters_circularity_rate (s"COALESCE(p.product_code, t.product_code) = pcr.product_code")
+
+# Use COALESCE to handle nulls from the full outer join
+derive {
+    product_code = s"COALESCE(p.product_code, t.product_code)",
+    year = s"COALESCE(p.year, t.year)",
+    geo = s"COALESCE(p.geo, t.geo)",
+    level = s"COALESCE(p.level, t.level)",
+
+    # Production values - rename to avoid ambiguity
+    production_volume_tonnes = p.production_volume_tonnes,
+    production_value_eur = p.production_value_eur,
+
+    # Trade values - rename to avoid ambiguity
+    import_volume_tonnes = t.import_volume_tonnes,
+    import_value_eur = t.import_value_eur,
+    export_volume_tonnes = t.export_volume_tonnes,
+    export_value_eur = t.export_value_eur
+}
+
+# Calculate apparent consumption
+derive {
+    apparent_consumption_tonnes = s"""
+        COALESCE(production_volume_tonnes, 0) +
+        COALESCE(import_volume_tonnes, 0) -
+        COALESCE(export_volume_tonnes, 0)
+    """,
+
+    apparent_consumption_value_eur = s"""
+        COALESCE(production_value_eur, 0) +
+        COALESCE(import_value_eur, 0) -
+        COALESCE(export_value_eur, 0)
+    """,
+
+    # Product-specific circularity rates from parameters_circularity_rate table
+    current_circularity_rate_pct = pcr.current_circularity_rate,
+    potential_circularity_rate_pct = pcr.potential_circularity_rate,
+    estimated_material_savings_tonnes = s"CAST(0.0 AS DOUBLE)",
+    estimated_monetary_savings_eur = s"CAST(0.0 AS DOUBLE)"
+}
+
+# Select all columns for the final table
+select {
+    product_code,
+    year,
+    geo,
+    level,
+    production_volume_tonnes,
+    production_value_eur,
+    import_volume_tonnes,
+    import_value_eur,
+    export_volume_tonnes,
+    export_value_eur,
+    apparent_consumption_tonnes,
+    apparent_consumption_value_eur,
+    current_circularity_rate_pct,
+    potential_circularity_rate_pct,
+    estimated_material_savings_tonnes,
+    estimated_monetary_savings_eur
+}

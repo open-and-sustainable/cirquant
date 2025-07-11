@@ -3,8 +3,9 @@ module DataProcessor
 using DataFrames
 using DuckDB, DBInterface
 using Dates
+using Dates: now, format
 using ..DatabaseAccess
-using ..ProductConversionTables
+using ..AnalysisConfigLoader
 using ..CircularityProcessor
 
 """
@@ -20,6 +21,7 @@ const PRQL_DIR = joinpath(@__DIR__, "prql")
 const CIRCULARITY_TABLE_PREFIX = "circularity_indicators_"
 const COUNTRY_AGGREGATES_PREFIX = "country_aggregates_"
 const PRODUCT_AGGREGATES_PREFIX = "product_aggregates_"
+const ANALYSIS_PARAMS_TABLE = "analysis_parameters"
 
 """
     ProcessingConfig
@@ -31,7 +33,7 @@ struct ProcessingConfig
     target_db::String  # Path to processed database
     year_range::Tuple{Int, Int}
     use_test_mode::Bool
-    external_params::Dict{String, Any}
+    analysis_params::Dict{String, Any}
     prql_timeout::Int  # Timeout for PRQL queries in seconds
 end
 
@@ -46,7 +48,7 @@ Create a processing configuration with sensible defaults.
 - `start_year`: Starting year for processing (default: 2002)
 - `end_year`: Ending year for processing (default: 2023)
 - `use_test_mode`: Use test database with only 2002 data (default: false)
-- `external_params`: External parameters for circularity calculations
+- `analysis_params`: Analysis parameters for circularity calculations
 - `prql_timeout`: Timeout for PRQL queries in seconds (default: 300)
 """
 function create_processing_config(;
@@ -55,7 +57,7 @@ function create_processing_config(;
     start_year::Int = 2002,
     end_year::Int = 2023,
     use_test_mode::Bool = false,
-    external_params::Dict{String, Any} = Dict{String, Any}(),
+    analysis_params::Dict{String, Any} = Dict{String, Any}(),
     prql_timeout::Int = 300
 )
     # Determine database paths
@@ -82,7 +84,7 @@ function create_processing_config(;
         target_db,
         (start_year, end_year),
         use_test_mode,
-        external_params,
+        analysis_params,
         prql_timeout
     )
 end
@@ -123,7 +125,7 @@ function process_year_complete(year::Int, config::ProcessingConfig)
 
     # Step 2: Process unit conversions for PRODCOM data
     step2_process_unit_conversions(year, config)
-    #=
+
     # Step 3: Extract and transform production data
     step3_process_production_data(year, config)
 
@@ -141,21 +143,21 @@ function process_year_complete(year::Int, config::ProcessingConfig)
 
     # Step 8: Apply circularity parameters
     step8_apply_circularity_parameters(year, config)
-
-    # Step 9: Data quality checks
-    step9_run_data_quality_checks(year, config)
-    =#
 end
 
 """
     step1_ensure_product_mapping(config::ProcessingConfig)
 
-Step 1: Ensure product mapping table exists in the processed database.
+Step 1: Ensure product mapping table and analysis parameters table exist in the processed database.
 """
 function step1_ensure_product_mapping(config::ProcessingConfig)
+    # Ensure product mapping table exists
     if !has_product_mapping_table(config.target_db)
         write_product_conversion_table(config.target_db)
     end
+
+    # Ensure parameter tables exist
+    ensure_circularity_parameters_table(config)
 end
 
 """
@@ -230,58 +232,22 @@ end
 Step 5: Create the main circularity indicators table by combining production and trade data.
 """
 function step5_create_circularity_indicators(year::Int, config::ProcessingConfig)
+    prql_path = joinpath(PRQL_DIR, "circularity_indicators.prql")
     table_name = "$(CIRCULARITY_TABLE_PREFIX)$(year)"
 
-    conn = DBInterface.connect(DuckDB.DB, config.target_db)
+    # Read PRQL query template
+    prql_query = read(prql_path, String)
 
-    # TODO: Implement proper product mapping between PRODCOM and HS codes
-    # For now, create a simplified version
-    query = """
-    CREATE OR REPLACE TABLE $table_name AS
-    WITH production AS (
-        SELECT * FROM production_temp_$(year)
-    ),
-    trade AS (
-        SELECT * FROM trade_temp_$(year)
-    ),
-    combined AS (
-        SELECT
-            COALESCE(p.product_code, t.product_code) as product_code,
-            COALESCE(p.year, t.year) as year,
-            COALESCE(p.geo, t.geo) as geo,
-            COALESCE(p.level, t.level) as level,
-            p.production_volume_tonnes,
-            p.production_value_eur,
-            t.import_volume_tonnes,
-            t.import_value_eur,
-            t.export_volume_tonnes,
-            t.export_value_eur
-        FROM production p
-        FULL OUTER JOIN trade t
-            ON p.product_code = t.product_code
-            AND p.geo = t.geo
+    # Replace year placeholder only
+    prql_query = replace(prql_query, "{{YEAR}}" => string(year))
+
+    # Execute PRQL query
+    execute_prql_to_table(
+        config.target_db,
+        config.target_db,
+        prql_query,
+        table_name
     )
-    SELECT
-        *,
-        -- Calculate apparent consumption
-        COALESCE(production_volume_tonnes, 0) +
-        COALESCE(import_volume_tonnes, 0) -
-        COALESCE(export_volume_tonnes, 0) as apparent_consumption_tonnes,
-
-        COALESCE(production_value_eur, 0) +
-        COALESCE(import_value_eur, 0) -
-        COALESCE(export_value_eur, 0) as apparent_consumption_value_eur,
-
-        -- Placeholder circularity rates (to be updated with external parameters)
-        0.0 as current_circularity_rate_pct,
-        30.0 as potential_circularity_rate_pct,
-        0.0 as estimated_material_savings_tonnes,
-        0.0 as estimated_monetary_savings_eur
-    FROM combined
-    """
-
-    DBInterface.execute(conn, query)
-    DBInterface.close!(conn)
 end
 
 """
@@ -334,56 +300,38 @@ end
 Step 8: Apply external circularity parameters to update circularity rates and estimates.
 
 TODO: Implement logic to:
-1. Load product-specific circularity rates from external_params
+1. Load product-specific circularity rates from analysis_params
 2. Calculate material savings based on rates and apparent consumption
 3. Calculate monetary savings based on material savings and unit values
 4. Update the circularity indicators table
 """
 function step8_apply_circularity_parameters(year::Int, config::ProcessingConfig)
+    prql_path = joinpath(PRQL_DIR, "update_circularity_parameters.prql")
     table_name = "$(CIRCULARITY_TABLE_PREFIX)$(year)"
+    temp_table = "$(table_name)_updated"
 
+    # Read PRQL query template
+    prql_query = read(prql_path, String)
+
+    # Replace year placeholder only
+    prql_query = replace(prql_query, "{{YEAR}}" => string(year))
+
+    # Execute PRQL query to create updated table
+    execute_prql_to_table(
+        config.target_db,
+        config.target_db,
+        prql_query,
+        temp_table
+    )
+
+    # Replace original table with updated one
     conn = DBInterface.connect(DuckDB.DB, config.target_db)
-
-    # Get circularity rates from external parameters
-    current_rates = get(config.external_params, "current_circularity_rates", Dict())
-    potential_rates = get(config.external_params, "potential_circularity_rates", Dict())
-    default_current = get(current_rates, "default", 0.0)
-    default_potential = get(potential_rates, "default", 30.0)
-
-    # TODO: Implement product-specific rate application
-    # For now, apply default rates
-    query = """
-    UPDATE $table_name
-    SET
-        current_circularity_rate_pct = $default_current,
-        potential_circularity_rate_pct = $default_potential,
-        estimated_material_savings_tonnes =
-            apparent_consumption_tonnes * (potential_circularity_rate_pct - current_circularity_rate_pct) / 100,
-        estimated_monetary_savings_eur =
-            apparent_consumption_value_eur * (potential_circularity_rate_pct - current_circularity_rate_pct) / 100
-    WHERE apparent_consumption_tonnes > 0
-    """
-
-    DBInterface.execute(conn, query)
+    DBInterface.execute(conn, "DROP TABLE IF EXISTS $table_name")
+    DBInterface.execute(conn, "ALTER TABLE $temp_table RENAME TO $table_name")
     DBInterface.close!(conn)
 end
 
-"""
-    step9_run_data_quality_checks(year::Int, config::ProcessingConfig)
 
-Step 9: Run data quality checks on processed data.
-
-TODO: Implement comprehensive quality checks:
-1. Check for negative apparent consumption
-2. Validate unit values are within reasonable ranges
-3. Check data completeness
-4. Identify outliers
-5. Validate trade balance consistency
-"""
-function step9_run_data_quality_checks(year::Int, config::ProcessingConfig)
-    # TODO: Implement quality checks
-    # For now, this is a placeholder
-end
 
 """
     execute_prql_to_table(source_db::String, target_db::String, prql_query::String, output_table::String)
@@ -413,24 +361,85 @@ function execute_prql_to_table(source_db::String, target_db::String, prql_query:
     end
 end
 
+
+
+
+"""
+    ensure_circularity_parameters_table(config::ProcessingConfig)
+
+Create or update the circularity parameters table with values from external parameters.
+"""
+function ensure_circularity_parameters_table(config::ProcessingConfig)
+    # Extract circularity rates from config
+    current_rates = get(config.analysis_params, "current_circularity_rates", Dict())
+    potential_rates = get(config.analysis_params, "potential_circularity_rates", Dict())
+
+    # Create DataFrame with product-specific rates
+    product_codes = String[]
+    current_rates_vec = Float64[]
+    potential_rates_vec = Float64[]
+
+    # Collect all product codes from both dictionaries
+    all_products = union(keys(current_rates), keys(potential_rates))
+
+    for product_code in all_products
+        push!(product_codes, product_code)
+        push!(current_rates_vec, get(current_rates, product_code, 0.0))
+        push!(potential_rates_vec, get(potential_rates, product_code, 30.0))
+    end
+
+    # Create DataFrame with one row per product
+    circularity_params_df = DataFrame(
+        product_code = product_codes,
+        current_circularity_rate = current_rates_vec,
+        potential_circularity_rate = potential_rates_vec,
+        last_updated = fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(product_codes))
+    )
+
+    # Write to database
+    DatabaseAccess.write_duckdb_table!(circularity_params_df, config.target_db, "parameters_circularity_rate")
+    @info "Created/updated circularity parameters table with $(length(product_codes)) product-specific rates"
+
+    # If there are recovery efficiency parameters, create a separate table
+    recovery_efficiency = get(config.analysis_params, "recovery_efficiency", Dict())
+    if !isempty(recovery_efficiency)
+        ensure_recovery_efficiency_table(config, recovery_efficiency)
+    end
+end
+
+"""
+    ensure_recovery_efficiency_table(config::ProcessingConfig, recovery_efficiency::Dict)
+
+Create or update the recovery efficiency parameters table.
+"""
+function ensure_recovery_efficiency_table(config::ProcessingConfig, recovery_efficiency::Dict)
+    # Create DataFrame with recovery methods as rows
+    methods = String[]
+    efficiencies = Float64[]
+
+    for (method, efficiency) in recovery_efficiency
+        push!(methods, method)
+        push!(efficiencies, efficiency)
+    end
+
+    recovery_params_df = DataFrame(
+        recovery_method = methods,
+        efficiency = efficiencies,
+        last_updated = fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(methods))
+    )
+
+    # Write to database
+    DatabaseAccess.write_duckdb_table!(recovery_params_df, config.target_db, "parameters_recovery_efficiency")
+    @info "Created/updated recovery efficiency parameters table with $(length(methods)) methods"
+end
+
 """
     has_product_mapping_table(db_path::String) -> Bool
 
 Check if product mapping table exists in the database.
 """
 function has_product_mapping_table(db_path::String)
-    conn = DBInterface.connect(DuckDB.DB, db_path)
-    try
-        result = DBInterface.execute(conn, """
-            SELECT COUNT(*) as cnt
-            FROM information_schema.tables
-            WHERE table_name = 'product_mapping_codes'
-        """) |> DataFrame
-
-        return first(result).cnt > 0
-    finally
-        DBInterface.close!(conn)
-    end
+    return DatabaseAccess.table_exists(db_path, "product_mapping_codes")
 end
 
 
@@ -464,7 +473,6 @@ export ProcessingConfig,
        step5_create_circularity_indicators,
        step6_create_country_aggregates,
        step7_create_product_aggregates,
-       step8_apply_circularity_parameters,
-       step9_run_data_quality_checks
+       step8_apply_circularity_parameters
 
 end # module DataProcessor

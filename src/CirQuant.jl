@@ -11,38 +11,61 @@ const DB_PATH_TEST = "CirQuant-database/raw/test.duckdb"
 
 # External parameters for circularity calculations - PLACEHOLDERS
 # TODO: These values need to be populated from literature/policy sources
-const CIRCULARITY_PARAMETERS = Dict{String, Any}(
+const ANALYSIS_PARAMETERS = Dict{String, Any}(
     # Current circularity rates by product (%)
     "current_circularity_rates" => Dict{String, Float64}(
-        "default" => 0.0,
-        # TODO: Add product-specific rates from literature
-        # "28.21.13.30" => ?,  # Heat pumps
-        # "27.11.40.00" => ?,  # PV panels
-        # "26.20.12.30" => ?,  # Printers
-        # "27.20.23.00" => ?,  # Li-ion batteries
-        # etc.
+
+        "28211330" => 5.0,    # Heat pumps - high metal content
+        "27114000" => 3.0,    # PV panels - emerging recycling
+        "26201230" => 2.0,    # Printers - some component reuse
+        "26201130" => 1.0,    # ICT - Smartphones - limited recycling
+        "26201150" => 1.0,    # ICT - Other phones
+        "26201300" => 2.0,    # ICT - Portable computers
+        "26201400" => 2.0,    # ICT - Other computers
+        "26201600" => 3.0,    # ICT - Monitors, I/O units
+        "26201700" => 2.0,    # ICT - Storage units
+        "26201800" => 2.0,    # ICT - Other units
+        "2620" => 2.0,        # Full ICT (PRODCOM 26.20)
+        "27202300" => 10.0,   # Batteries - Li-ion - regulated recycling
+        "27202400" => 8.0     # Batteries - Other - established recycling
     ),
 
     # Potential circularity rates with best practices (%)
     "potential_circularity_rates" => Dict{String, Float64}(
-        "default" => 30.0,
-        # TODO: Add product-specific potential rates from literature
-        # "28.21.13.30" => ?,  # Heat pumps potential
-        # "27.11.40.00" => ?,  # PV panels potential
-        # "26.20.12.30" => ?,  # Printers potential
-        # "27.20.23.00" => ?,  # Li-ion batteries potential
-        # etc.
+
+        "28211330" => 45.0,   # Heat pumps - high recycling potential
+        "27114000" => 65.0,   # PV panels - developing technologies
+        "26201230" => 40.0,   # Printers - modular design potential
+        "26201130" => 35.0,   # ICT - Smartphones - valuable materials
+        "26201150" => 30.0,   # ICT - Other phones
+        "26201300" => 45.0,   # ICT - Portable computers
+        "26201400" => 45.0,   # ICT - Other computers
+        "26201600" => 50.0,   # ICT - Monitors, I/O units
+        "26201700" => 40.0,   # ICT - Storage units
+        "26201800" => 35.0,   # ICT - Other units
+        "2620" => 40.0,       # Full ICT (PRODCOM 26.20)
+        "27202300" => 70.0,   # Batteries - Li-ion - EU regulations
+        "27202400" => 60.0    # Batteries - Other - mature recycling
     ),
 
     # Product weight assumptions for unit conversions (tonnes per piece)
     "product_weights_tonnes" => Dict{String, Float64}(
-        "default_piece" => 0.010,      # Default 10kg per piece
+
         "28211330" => 0.100,           # Heat pumps ~100kg
         "27114000" => 0.020,           # PV panels ~20kg
-        "2720" => 0.025,               # Batteries (prefix) ~25kg
-        "2620" => 0.005,               # ICT equipment (prefix) ~5kg
-        "battery_cell" => 0.0003,      # Battery cells ~300g
-        # TODO: Add more product-specific weights from technical specs
+        "26201230" => 0.015,           # Printers ~15kg
+        "26201130" => 0.0002,          # ICT - Smartphones ~200g
+        "26201150" => 0.0003,          # ICT - Other phones ~300g
+        "26201300" => 0.002,           # ICT - Portable computers ~2kg
+        "26201400" => 0.008,           # ICT - Other computers ~8kg
+        "26201600" => 0.005,           # ICT - Monitors, I/O units ~5kg
+        "26201700" => 0.001,           # ICT - Storage units ~1kg
+        "26201800" => 0.003,           # ICT - Other units ~3kg
+        "2620" => 0.005,               # Full ICT (prefix) ~5kg average
+        "27202300" => 0.0005,          # Batteries - Li-ion ~500g
+        "27202400" => 0.001,           # Batteries - Other ~1kg
+        "2720" => 0.0008,              # Batteries (prefix) ~800g average
+        "battery_cell" => 0.0003       # Battery cells ~300g
     ),
 
     # Other parameters as needed
@@ -51,7 +74,7 @@ const CIRCULARITY_PARAMETERS = Dict{String, Any}(
 
 # Include and use the modules
 include("utils/DatabaseAccess.jl")
-include("utils/ProductConversionTables.jl")
+include("utils/AnalysisConfigLoader.jl")
 include("DataFetch/ProdcomDataFetch.jl")
 include("DataFetch/ComextDataFetch.jl")
 include("DataTransform/CircularityProcessor.jl")
@@ -60,7 +83,7 @@ include("DataTransform/ProdcomUnitConverter.jl")
 include("DataTransform/DataProcessor.jl")
 
 using .DatabaseAccess
-using .ProductConversionTables
+using .AnalysisConfigLoader
 using .ProdcomDataFetch
 using .ComextDataFetch
 using .CircularityProcessor
@@ -226,7 +249,7 @@ success = write_product_conversion_table("path/to/custom.duckdb")
 ```
 """
 function write_product_conversion_table(db_path::String=DB_PATH_PROCESSED; kwargs...)
-    return ProductConversionTables.write_product_conversion_table(db_path; kwargs...)
+    return AnalysisConfigLoader.write_product_conversion_table(db_path; kwargs...)
 end
 
 """
@@ -243,7 +266,7 @@ Reads the product conversion table from a DuckDB database.
 - `nothing`: If the table doesn't exist or an error occurs
 """
 function read_product_conversion_table(db_path::String=DB_PATH_PROCESSED; kwargs...)
-    return ProductConversionTables.read_product_conversion_table(db_path; kwargs...)
+    return AnalysisConfigLoader.read_product_conversion_table(db_path; kwargs...)
 end
 
 """
@@ -261,7 +284,7 @@ The DataFrame includes:
 - `DataFrame`: Product mapping data
 """
 function get_product_mapping_data()
-    return ProductConversionTables.get_product_mapping_data()
+    return AnalysisConfigLoader.load_product_mappings()
 end
 
 """
@@ -288,7 +311,7 @@ product = get_product_by_code("8507.60", :hs_codes)
 ```
 """
 function get_product_by_code(code::String, code_type::Symbol=:prodcom_code; db_path::String=DB_PATH_PROCESSED)
-    return ProductConversionTables.get_product_by_code(db_path, code, code_type)
+    return AnalysisConfigLoader.get_product_by_code(db_path, code, code_type)
 end
 
 """
@@ -453,7 +476,7 @@ results = process_raw_to_processed(start_year=2020, end_year=2022)
 function process_raw_to_processed(; kwargs...)
     # Create processing configuration with external parameters
     config = DataProcessor.create_processing_config(;
-        external_params=CIRCULARITY_PARAMETERS,
+        analysis_params=ANALYSIS_PARAMETERS,
         kwargs...
     )
 
@@ -488,7 +511,7 @@ result = process_single_year(2002, use_test_mode=true)
 """
 function process_single_year(year::Int; kwargs...)
     config = DataProcessor.create_processing_config(;
-        external_params=CIRCULARITY_PARAMETERS,
+        analysis_params=ANALYSIS_PARAMETERS,
         start_year=year,
         end_year=year,
         kwargs...
@@ -519,7 +542,7 @@ export fetch_prodcom_data,
        create_circularity_tables_range,
        inspect_raw_tables,
        ensure_prql_installed,
-       CIRCULARITY_PARAMETERS,
+       ANALYSIS_PARAMETERS,
        DB_PATH_TEST,
        process_raw_to_processed,
        process_single_year

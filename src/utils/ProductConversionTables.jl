@@ -138,21 +138,15 @@ mapping_df = read_product_conversion_table(db_path)
 """
 function read_product_conversion_table(db_path::String; table_name::String=PRODUCT_MAPPING_TABLE_NAME)
     try
-        # Connect to database
-        db_conn = DuckDB.DB(db_path)
-        con = DBInterface.connect(db_conn)
-
-        # Check if table exists
-        result = DBInterface.execute(con,
-            "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = '$table_name'"
-        ) |> DataFrame
-
-        if result.cnt[1] == 0
-            @warn "Table '$table_name' does not exist in database"
-            DBInterface.close!(con)
-            DBInterface.close!(db_conn)
+        # Check if table exists using centralized function
+        if !DatabaseAccess.table_exists(db_path, table_name)
+            @error "Table '$table_name' does not exist in database at: $db_path"
             return nothing
         end
+
+        # Connect to database to read the table
+        db_conn = DuckDB.DB(db_path)
+        con = DBInterface.connect(db_conn)
 
         # Read the table
         df = DBInterface.execute(con, "SELECT * FROM $table_name") |> DataFrame
