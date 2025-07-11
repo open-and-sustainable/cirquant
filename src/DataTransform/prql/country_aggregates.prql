@@ -1,0 +1,194 @@
+# PRQL query for calculating country-level aggregates
+# This query aggregates all product data by country to create summary statistics
+# for each geographic entity (country or EU27)
+
+# Assumes input from circularity_indicators_YYYY or combined production/trade data
+from circularity_indicators_{{YEAR}}
+filter geo != null
+
+# Group by geography and aggregate all metrics
+group {geo, year} (
+    aggregate {
+        # Production aggregates
+        total_production_tonnes = sum production_volume_tonnes,
+        total_production_value_eur = sum production_value_eur,
+
+        # Import aggregates
+        total_imports_tonnes = sum import_volume_tonnes,
+        total_imports_value_eur = sum import_value_eur,
+
+        # Export aggregates
+        total_exports_tonnes = sum export_volume_tonnes,
+        total_exports_value_eur = sum export_value_eur,
+
+        # Apparent consumption aggregate
+        total_apparent_consumption_tonnes = sum apparent_consumption_tonnes,
+        total_apparent_consumption_value_eur = sum apparent_consumption_value_eur,
+
+        # Count of products for this country
+        product_count = count_distinct product_code,
+
+        # Count of products with production data
+        products_with_production = count_distinct (case [
+            production_volume_tonnes > 0 => product_code,
+            true => null
+        ]),
+
+        # Count of products with trade data
+        products_with_trade = count_distinct (case [
+            (import_volume_tonnes > 0 || export_volume_tonnes > 0) => product_code,
+            true => null
+        ])
+    }
+)
+
+# Calculate derived country-level indicators
+derive {
+    # Trade balance
+    trade_balance_tonnes = total_exports_tonnes - total_imports_tonnes,
+    trade_balance_value_eur = total_exports_value_eur - total_imports_value_eur,
+
+    # Trade coverage ratio (exports/imports)
+    trade_coverage_ratio = s"""
+        CASE
+            WHEN total_imports_value_eur > 0
+            THEN total_exports_value_eur / total_imports_value_eur
+            ELSE NULL
+        END
+    """,
+
+    # Overall import dependency
+    overall_import_dependency = s"""
+        CASE
+            WHEN (total_production_tonnes + total_imports_tonnes) > 0
+            THEN total_imports_tonnes / (total_production_tonnes + total_imports_tonnes)
+            ELSE NULL
+        END
+    """,
+
+    # Overall export intensity
+    overall_export_intensity = s"""
+        CASE
+            WHEN total_production_tonnes > 0
+            THEN total_exports_tonnes / total_production_tonnes
+            ELSE NULL
+        END
+    """,
+
+    # Trade openness index
+    trade_openness_index = s"""
+        CASE
+            WHEN (total_production_tonnes + total_imports_tonnes + total_exports_tonnes) > 0
+            THEN (total_imports_tonnes + total_exports_tonnes) /
+                 (total_production_tonnes + total_imports_tonnes + total_exports_tonnes)
+            ELSE NULL
+        END
+    """,
+
+    # Average unit values across all products
+    avg_production_unit_value_country = s"""
+        CASE
+            WHEN total_production_tonnes > 0
+            THEN total_production_value_eur / total_production_tonnes
+            ELSE NULL
+        END
+    """,
+
+    avg_import_unit_value_country = s"""
+        CASE
+            WHEN total_imports_tonnes > 0
+            THEN total_imports_value_eur / total_imports_tonnes
+            ELSE NULL
+        END
+    """,
+
+    avg_export_unit_value_country = s"""
+        CASE
+            WHEN total_exports_tonnes > 0
+            THEN total_exports_value_eur / total_exports_tonnes
+            ELSE NULL
+        END
+    """,
+
+    # Data coverage indicator (% of products with data)
+    production_coverage = s"""
+        CASE
+            WHEN product_count > 0
+            THEN CAST(products_with_production AS DOUBLE) / CAST(product_count AS DOUBLE)
+            ELSE 0
+        END
+    """,
+
+    trade_coverage = s"""
+        CASE
+            WHEN product_count > 0
+            THEN CAST(products_with_trade AS DOUBLE) / CAST(product_count AS DOUBLE)
+            ELSE 0
+        END
+    """
+}
+
+# Add country classification based on trade patterns
+derive {
+    country_trade_profile = s"""
+        CASE
+            WHEN trade_balance_value_eur > 0 AND overall_export_intensity > 0.5
+                THEN 'major_exporter'
+            WHEN trade_balance_value_eur > 0
+                THEN 'net_exporter'
+            WHEN trade_balance_value_eur < 0 AND overall_import_dependency > 0.5
+                THEN 'import_dependent'
+            WHEN trade_balance_value_eur < 0
+                THEN 'net_importer'
+            ELSE 'balanced'
+        END
+    """,
+
+    # Economic complexity indicator (based on diversity and value)
+    economic_complexity_indicator = s"""
+        products_with_production * avg_production_unit_value_country / 1000000
+    """
+}
+
+# Select final fields for country aggregates table
+select {
+    geo,
+    year,
+
+    # Core aggregates
+    total_production_tonnes,
+    total_production_value_eur,
+    total_imports_tonnes,
+    total_imports_value_eur,
+    total_exports_tonnes,
+    total_exports_value_eur,
+    total_apparent_consumption_tonnes,
+    total_apparent_consumption_value_eur,
+
+    # Trade indicators
+    trade_balance_tonnes,
+    trade_balance_value_eur,
+    trade_coverage_ratio,
+    overall_import_dependency,
+    overall_export_intensity,
+    trade_openness_index,
+
+    # Average unit values
+    avg_production_unit_value_country,
+    avg_import_unit_value_country,
+    avg_export_unit_value_country,
+
+    # Product counts and coverage
+    product_count,
+    products_with_production,
+    products_with_trade,
+    production_coverage,
+    trade_coverage,
+
+    # Classifications
+    country_trade_profile,
+    economic_complexity_indicator
+}
+
+# Sort by geo for consistent output
+sort {geo}

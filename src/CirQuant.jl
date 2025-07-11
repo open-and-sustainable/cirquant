@@ -6,6 +6,49 @@ using DataFrames, ProdcomAPI, ComextAPI
 const DB_PATH_RAW = "CirQuant-database/raw/CirQuant_2002-2023.duckdb"
 const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_2002-2023.duckdb"
 
+# Test database for development (contains only 2002 data)
+const DB_PATH_TEST = "CirQuant-database/raw/test.duckdb"
+
+# External parameters for circularity calculations - PLACEHOLDERS
+# TODO: These values need to be populated from literature/policy sources
+const CIRCULARITY_PARAMETERS = Dict{String, Any}(
+    # Current circularity rates by product (%)
+    "current_circularity_rates" => Dict{String, Float64}(
+        "default" => 0.0,
+        # TODO: Add product-specific rates from literature
+        # "28.21.13.30" => ?,  # Heat pumps
+        # "27.11.40.00" => ?,  # PV panels
+        # "26.20.12.30" => ?,  # Printers
+        # "27.20.23.00" => ?,  # Li-ion batteries
+        # etc.
+    ),
+
+    # Potential circularity rates with best practices (%)
+    "potential_circularity_rates" => Dict{String, Float64}(
+        "default" => 30.0,
+        # TODO: Add product-specific potential rates from literature
+        # "28.21.13.30" => ?,  # Heat pumps potential
+        # "27.11.40.00" => ?,  # PV panels potential
+        # "26.20.12.30" => ?,  # Printers potential
+        # "27.20.23.00" => ?,  # Li-ion batteries potential
+        # etc.
+    ),
+
+    # Product weight assumptions for unit conversions (tonnes per piece)
+    "product_weights_tonnes" => Dict{String, Float64}(
+        "default_piece" => 0.010,      # Default 10kg per piece
+        "28211330" => 0.100,           # Heat pumps ~100kg
+        "27114000" => 0.020,           # PV panels ~20kg
+        "2720" => 0.025,               # Batteries (prefix) ~25kg
+        "2620" => 0.005,               # ICT equipment (prefix) ~5kg
+        "battery_cell" => 0.0003,      # Battery cells ~300g
+        # TODO: Add more product-specific weights from technical specs
+    ),
+
+    # Other parameters as needed
+    "placeholder_for_future_params" => Dict{String, Any}()
+)
+
 # Include and use the modules
 include("utils/DatabaseAccess.jl")
 include("utils/ProductConversionTables.jl")
@@ -14,6 +57,7 @@ include("DataFetch/ComextDataFetch.jl")
 include("DataTransform/CircularityProcessor.jl")
 include("DataTransform/UnitConversion/UnitConverter.jl")
 include("DataTransform/ProdcomUnitConverter.jl")
+include("DataTransform/DataProcessor.jl")
 
 using .DatabaseAccess
 using .ProductConversionTables
@@ -21,6 +65,7 @@ using .ProdcomDataFetch
 using .ComextDataFetch
 using .CircularityProcessor
 using .ProdcomUnitConverter
+using .DataProcessor
 
 
 """
@@ -377,6 +422,85 @@ function ensure_prql_installed()
     return CircularityProcessor.ensure_prql_installed()
 end
 
+"""
+    process_raw_to_processed(; kwargs...)
+
+Main function to process raw data into the processed database format.
+This orchestrates the complete transformation pipeline.
+
+# Keywords
+- `use_test_mode`: Use test database with only 2002 data (default: false)
+- `start_year`: Starting year for processing (default: 2002)
+- `end_year`: Ending year for processing (default: 2023)
+- `source_db`: Path to raw database (auto-determined if not specified)
+- `target_db`: Path to processed database (auto-determined if not specified)
+
+# Returns
+- Dictionary with processing results and statistics
+
+# Example
+```julia
+# Process test data (2002 only)
+results = process_raw_to_processed(use_test_mode=true)
+
+# Process full dataset
+results = process_raw_to_processed(start_year=2002, end_year=2023)
+
+# Process specific years
+results = process_raw_to_processed(start_year=2020, end_year=2022)
+```
+"""
+function process_raw_to_processed(; kwargs...)
+    # Create processing configuration with external parameters
+    config = DataProcessor.create_processing_config(;
+        external_params=CIRCULARITY_PARAMETERS,
+        kwargs...
+    )
+
+    # Run the complete processing pipeline
+    return DataProcessor.process_all_years(config)
+end
+
+"""
+    process_single_year(year::Int; kwargs...)
+
+Process a single year of raw data into the processed format.
+
+# Arguments
+- `year`: The year to process
+
+# Keywords
+- `use_test_mode`: Use test database (default: false)
+- `source_db`: Path to raw database
+- `target_db`: Path to processed database
+
+# Returns
+- Dictionary with processing results for the year
+
+# Example
+```julia
+# Process year 2022
+result = process_single_year(2022)
+
+# Process year 2002 from test database
+result = process_single_year(2002, use_test_mode=true)
+```
+"""
+function process_single_year(year::Int; kwargs...)
+    config = DataProcessor.create_processing_config(;
+        external_params=CIRCULARITY_PARAMETERS,
+        start_year=year,
+        end_year=year,
+        kwargs...
+    )
+
+    # Ensure database structure
+    DataProcessor.ensure_processed_db_structure(config)
+
+    # Process the single year
+    return DataProcessor.process_year_complete(year, config)
+end
+
 # Export public API functions
 export fetch_prodcom_data,
        fetch_prodcom_dataset,
@@ -394,6 +518,10 @@ export fetch_prodcom_data,
        validate_circularity_table,
        create_circularity_tables_range,
        inspect_raw_tables,
-       ensure_prql_installed
+       ensure_prql_installed,
+       CIRCULARITY_PARAMETERS,
+       DB_PATH_TEST,
+       process_raw_to_processed,
+       process_single_year
 
 end # module CirQuant

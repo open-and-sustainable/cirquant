@@ -971,7 +971,7 @@ function debug_production_pipeline(db_path::String, year::Int; product_code::Uni
         println(distinct_values)
 
         # Step 3: Execute PRQL and check result
-        prql_path = joinpath(dirname(@__FILE__), "production_data.prql")
+        prql_path = joinpath(dirname(@__FILE__), "prql", "production_data.prql")
         production_df = execute_prql_for_year(prql_path, db_path, year)
 
         if product_code !== nothing

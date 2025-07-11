@@ -1,0 +1,186 @@
+# PRQL query for calculating derived indicators
+# This query combines production and trade data to calculate:
+# - Apparent consumption
+# - Trade balance
+# - Import dependency
+# - Export intensity
+
+# Assume we have production_data and trade_data CTEs from previous transformations
+# This query will be part of a larger pipeline
+
+from combined_data
+derive {
+    # Calculate apparent consumption (Production + Imports - Exports)
+    apparent_consumption_tonnes = s"""
+        COALESCE(production_volume_tonnes, 0) +
+        COALESCE(import_volume_tonnes, 0) -
+        COALESCE(export_volume_tonnes, 0)
+    """,
+
+    apparent_consumption_value_eur = s"""
+        COALESCE(production_value_eur, 0) +
+        COALESCE(import_value_eur, 0) -
+        COALESCE(export_value_eur, 0)
+    """,
+
+    # Calculate trade balance (Exports - Imports)
+    trade_balance_tonnes = s"""
+        COALESCE(export_volume_tonnes, 0) -
+        COALESCE(import_volume_tonnes, 0)
+    """,
+
+    trade_balance_value_eur = s"""
+        COALESCE(export_value_eur, 0) -
+        COALESCE(import_value_eur, 0)
+    """,
+
+    # Calculate import dependency (Imports / (Production + Imports))
+    # Handle division by zero
+    import_dependency = s"""
+        CASE
+            WHEN (COALESCE(production_volume_tonnes, 0) + COALESCE(import_volume_tonnes, 0)) > 0
+            THEN COALESCE(import_volume_tonnes, 0) /
+                 (COALESCE(production_volume_tonnes, 0) + COALESCE(import_volume_tonnes, 0))
+            ELSE NULL
+        END
+    """,
+
+    # Calculate export intensity (Exports / Production)
+    # Handle division by zero
+    export_intensity = s"""
+        CASE
+            WHEN COALESCE(production_volume_tonnes, 0) > 0
+            THEN COALESCE(export_volume_tonnes, 0) / COALESCE(production_volume_tonnes, 0)
+            ELSE NULL
+        END
+    """,
+
+    # Self-sufficiency ratio (Production / Apparent Consumption)
+    self_sufficiency_ratio = s"""
+        CASE
+            WHEN apparent_consumption_tonnes > 0
+            THEN COALESCE(production_volume_tonnes, 0) / apparent_consumption_tonnes
+            ELSE NULL
+        END
+    """,
+
+    # Net trade position indicator
+    net_trade_position = s"""
+        CASE
+            WHEN trade_balance_tonnes > 0 THEN 'net_exporter'
+            WHEN trade_balance_tonnes < 0 THEN 'net_importer'
+            WHEN trade_balance_tonnes = 0 THEN 'balanced'
+            ELSE 'no_trade'
+        END
+    """,
+
+    # Trade openness indicator ((Imports + Exports) / (Production + Imports + Exports))
+    trade_openness = s"""
+        CASE
+            WHEN (COALESCE(production_volume_tonnes, 0) +
+                  COALESCE(import_volume_tonnes, 0) +
+                  COALESCE(export_volume_tonnes, 0)) > 0
+            THEN (COALESCE(import_volume_tonnes, 0) + COALESCE(export_volume_tonnes, 0)) /
+                 (COALESCE(production_volume_tonnes, 0) +
+                  COALESCE(import_volume_tonnes, 0) +
+                  COALESCE(export_volume_tonnes, 0))
+            ELSE NULL
+        END
+    """,
+
+    # Average unit values for quality checks
+    avg_production_unit_value = s"""
+        CASE
+            WHEN COALESCE(production_volume_tonnes, 0) > 0
+            THEN COALESCE(production_value_eur, 0) / COALESCE(production_volume_tonnes, 0)
+            ELSE NULL
+        END
+    """,
+
+    avg_import_unit_value = s"""
+        CASE
+            WHEN COALESCE(import_volume_tonnes, 0) > 0
+            THEN COALESCE(import_value_eur, 0) / COALESCE(import_volume_tonnes, 0)
+            ELSE NULL
+        END
+    """,
+
+    avg_export_unit_value = s"""
+        CASE
+            WHEN COALESCE(export_volume_tonnes, 0) > 0
+            THEN COALESCE(export_value_eur, 0) / COALESCE(export_volume_tonnes, 0)
+            ELSE NULL
+        END
+    """
+}
+
+# Add data quality flags
+derive {
+    # Flag if apparent consumption is negative (data quality issue)
+    negative_consumption_flag = apparent_consumption_tonnes < 0,
+
+    # Flag if export intensity is unrealistic (>2 suggests re-exports or data issues)
+    high_export_intensity_flag = export_intensity > 2.0,
+
+    # Flag if unit values differ significantly (potential data quality issue)
+    unit_value_discrepancy_flag = s"""
+        CASE
+            WHEN avg_production_unit_value IS NOT NULL
+                 AND avg_export_unit_value IS NOT NULL
+                 AND avg_production_unit_value > 0
+            THEN ABS(avg_export_unit_value - avg_production_unit_value) / avg_production_unit_value > 0.5
+            ELSE FALSE
+        END
+    """,
+
+    # Overall data completeness score
+    data_completeness_score = s"""
+        (CASE WHEN production_volume_tonnes IS NOT NULL THEN 0.25 ELSE 0 END +
+         CASE WHEN production_value_eur IS NOT NULL THEN 0.25 ELSE 0 END +
+         CASE WHEN import_volume_tonnes IS NOT NULL OR import_value_eur IS NOT NULL THEN 0.25 ELSE 0 END +
+         CASE WHEN export_volume_tonnes IS NOT NULL OR export_value_eur IS NOT NULL THEN 0.25 ELSE 0 END)
+    """
+}
+
+# Select all relevant fields
+select {
+    # Identifiers
+    product_code,
+    product_name,
+    year,
+    geo,
+    level,
+
+    # Original metrics
+    production_volume_tonnes,
+    production_value_eur,
+    import_volume_tonnes,
+    import_value_eur,
+    export_volume_tonnes,
+    export_value_eur,
+
+    # Derived indicators
+    apparent_consumption_tonnes,
+    apparent_consumption_value_eur,
+    trade_balance_tonnes,
+    trade_balance_value_eur,
+    import_dependency,
+    export_intensity,
+    self_sufficiency_ratio,
+    net_trade_position,
+    trade_openness,
+
+    # Unit values
+    avg_production_unit_value,
+    avg_import_unit_value,
+    avg_export_unit_value,
+
+    # Data quality indicators
+    negative_consumption_flag,
+    high_export_intensity_flag,
+    unit_value_discrepancy_flag,
+    data_completeness_score
+}
+
+# Sort by product and geography
+sort {product_code, geo}

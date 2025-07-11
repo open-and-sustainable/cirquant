@@ -4,12 +4,12 @@
 
 from prodcom_ds_056120_{{YEAR}}
 # Filter for production indicators only and exclude unit values
-filter indicators == "PQNTBASE" || indicators == "PVALBASE"
+filter indicators == "PRODQNT" || indicators == "PRODVAL"
 filter value != "kg" && value != "p/st" && value != "m" && value != "m2" && value != "m3" && value != "l" && value != "hl" && value != "ct/l"
 derive {
     # Convert value based on indicator type, using TRY_CAST to handle non-numeric values
-    production_volume_tonnes = s"CASE WHEN indicators = 'PQNTBASE' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
-    production_value_eur = s"CASE WHEN indicators = 'PVALBASE' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
+    production_volume_tonnes = s"CASE WHEN indicators = 'PRODQNT' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
+    production_value_eur = s"CASE WHEN indicators = 'PRODVAL' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
     # Ensure product code is clean
     product_code_clean = s"TRIM(prccode)"
 }

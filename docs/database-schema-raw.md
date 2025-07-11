@@ -76,7 +76,7 @@ International trade data at 6-digit HS code level.
 | flow | VARCHAR | Trade flow code (1=Import, 2=Export) |
 | indicators | VARCHAR | Indicator code (VALUE_EUR, QUANTITY_KG) |
 | time | VARCHAR | Year |
-| value | VARCHAR | Numeric value (stored as string) |
+| value | VARCHAR | Numeric value (stored as string, may use scientific notation) |
 | freq_label | VARCHAR | Frequency label |
 | reporter_label | VARCHAR | Reporter country name |
 | partner_label | VARCHAR | Partner description |
@@ -90,7 +90,7 @@ International trade data at 6-digit HS code level.
 | partner_code | VARCHAR | Original partner code |
 | flow_type | VARCHAR | Flow type name |
 | flow_code | BIGINT | Flow code (1 or 2) |
-| fetch_date | TIMESTAMP | When data was fetched |
+| fetch_date | TIMESTAMP | When data was fetched (format: YYYY-MM-DD HH:MM:SS.SSS) |
 
 **Indicators:**
 - `VALUE_EUR`: Trade value in EUR
@@ -136,7 +136,7 @@ WHERE product = '850760'
    - Data not yet reported
 
 2. **Value Formats**: Numeric values may include:
-   - Scientific notation
+   - Scientific notation (e.g., "2.1788009e8", "6.69011062e8")
    - Decimal separators
    - Special markers (":c" for confidential)
 

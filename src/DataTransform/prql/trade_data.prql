@@ -1,15 +1,15 @@
 # PRQL query for extracting COMEXT trade data
 # This query extracts import/export volumes and values by product and country for a specific year
 
-from comext_DS_045409_{{YEAR}}
+from comext_ds_059341_{{YEAR}}
 # Filter for valid flow types and indicators (aggregate all partner countries)
 filter flow == "1" || flow == "2"
-filter indicators == "VALUE_IN_EUROS" || indicators == "QUANTITY_IN_100KG"
+filter indicators == "VALUE_EUR" || indicators == "QUANTITY_KG"
 derive {
     # Handle different indicator types
-    value_eur = s"CASE WHEN indicators = 'VALUE_IN_EUROS' THEN value ELSE NULL END",
-    # Convert 100kg to tonnes
-    volume_tonnes = s"CASE WHEN indicators = 'QUANTITY_IN_100KG' THEN value * 0.1 ELSE NULL END",
+    value_eur = s"CASE WHEN indicators = 'VALUE_EUR' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
+    # Convert kg to tonnes
+    volume_tonnes = s"CASE WHEN indicators = 'QUANTITY_KG' THEN TRY_CAST(value AS DOUBLE) * 0.001 ELSE NULL END",
     # Ensure product code is clean (HS code)
     product_code_clean = s"TRIM(product)",
     # Identify flow type (flow column contains numeric codes)
@@ -18,10 +18,10 @@ derive {
 }
 derive {
     # Split volumes and values by flow type
-    import_volume_tonnes = s"CASE WHEN flow = '1' AND indicators = 'QUANTITY_IN_100KG' THEN value * 0.1 ELSE 0 END",
-    import_value_eur = s"CASE WHEN flow = '1' AND indicators = 'VALUE_IN_EUROS' THEN value ELSE 0 END",
-    export_volume_tonnes = s"CASE WHEN flow = '2' AND indicators = 'QUANTITY_IN_100KG' THEN value * 0.1 ELSE 0 END",
-    export_value_eur = s"CASE WHEN flow = '2' AND indicators = 'VALUE_IN_EUROS' THEN value ELSE 0 END"
+    import_volume_tonnes = s"CASE WHEN flow = '1' AND indicators = 'QUANTITY_KG' THEN TRY_CAST(value AS DOUBLE) * 0.001 ELSE 0 END",
+    import_value_eur = s"CASE WHEN flow = '1' AND indicators = 'VALUE_EUR' THEN TRY_CAST(value AS DOUBLE) ELSE 0 END",
+    export_volume_tonnes = s"CASE WHEN flow = '2' AND indicators = 'QUANTITY_KG' THEN TRY_CAST(value AS DOUBLE) * 0.001 ELSE 0 END",
+    export_value_eur = s"CASE WHEN flow = '2' AND indicators = 'VALUE_EUR' THEN TRY_CAST(value AS DOUBLE) ELSE 0 END"
 }
 select {
     product_code = product_code_clean,

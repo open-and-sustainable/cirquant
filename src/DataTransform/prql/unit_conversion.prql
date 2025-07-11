@@ -1,0 +1,99 @@
+# PRQL query for converting PRODCOM units to tonnes
+# This query applies unit conversion factors to standardize all quantities to tonnes
+
+# First, extract unit information from QNTUNIT indicator
+let unit_data = (
+    from prodcom_ds_056120_{{YEAR}}
+    filter indicators == "QNTUNIT"
+    select {
+        product_code = prccode,
+        unit = value,
+        geo = decl
+    }
+)
+
+# Extract quantity values from PRODQNT indicator
+let quantity_data = (
+    from prodcom_ds_056120_{{YEAR}}
+    filter indicators == "PRODQNT"
+    # Filter out rows where value contains unit strings instead of numbers
+    filter value != "kg" && value != "p/st" && value != "ce/el" && value != "m" && value != "m2" && value != "m3" && value != "l" && value != "hl" && value != "ct/l"
+    derive {
+        quantity_value = s"TRY_CAST(value AS DOUBLE)"
+    }
+    filter quantity_value != null
+    select {
+        product_code = prccode,
+        geo = decl,
+        quantity_raw = quantity_value
+    }
+)
+
+# Join quantity data with units
+from quantity_data
+join side:left unit_data (quantity_data.product_code == unit_data.product_code && quantity_data.geo == unit_data.geo)
+derive {
+    # Apply conversion factors based on unit type
+    conversion_factor = s"""
+        CASE
+            -- Direct weight conversions
+            WHEN unit_data.unit = 'kg' THEN 0.001  -- kg to tonnes
+            WHEN unit_data.unit = 't' THEN 1.0     -- already tonnes
+
+            -- Piece/unit conversions (product-specific)
+            WHEN unit_data.unit = 'p/st' THEN
+                CASE
+                    -- Heat pumps (PRODCOM 28.21.13.30 without dots is 28211330)
+                    WHEN quantity_data.product_code = '28211330' THEN 0.100  -- ~100kg per unit
+                    -- PV panels (27.11.40.00 without dots is 27114000)
+                    WHEN quantity_data.product_code = '27114000' THEN 0.020  -- ~20kg per panel
+                    -- Batteries (prefix 2720)
+                    WHEN LEFT(quantity_data.product_code, 4) = '2720' THEN 0.025  -- ~25kg average
+                    -- ICT equipment (prefix 2620)
+                    WHEN LEFT(quantity_data.product_code, 4) = '2620' THEN 0.005  -- ~5kg average
+                    -- Default for pieces
+                    ELSE 0.010  -- 10kg default
+                END
+
+            -- Battery cells/elements
+            WHEN unit_data.unit = 'ce/el' THEN 0.0003  -- ~300g per cell
+
+            -- If no unit found, assume kg
+            WHEN unit_data.unit IS NULL THEN 0.001
+
+            -- Unknown unit: preserve value
+            ELSE 1.0
+        END
+    """,
+
+    # Calculate quantity in tonnes
+    quantity_tonnes = quantity_data.quantity_raw * conversion_factor,
+
+    # Flag conversions for quality tracking
+    conversion_method = s"""
+        CASE
+            WHEN unit_data.unit = 'kg' THEN 'direct'
+            WHEN unit_data.unit = 't' THEN 'direct'
+            WHEN unit_data.unit = 'p/st' THEN 'average-weight'
+            WHEN unit_data.unit = 'ce/el' THEN 'average-weight'
+            WHEN unit_data.unit IS NULL THEN 'assumed-kg'
+            ELSE 'unknown'
+        END
+    """
+}
+
+# Select final converted data
+select {
+    product_code = quantity_data.product_code,
+    geo = quantity_data.geo,
+    year = s"{{YEAR}}",
+    quantity_tonnes,
+    original_quantity = quantity_data.quantity_raw,
+    original_unit = s"COALESCE(unit_data.unit, 'kg')",
+    conversion_factor,
+    conversion_method
+}
+
+# Filter out non-convertible or invalid results
+filter quantity_tonnes > 0
+sort {product_code, geo}
