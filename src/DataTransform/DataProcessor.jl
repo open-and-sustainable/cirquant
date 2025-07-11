@@ -120,6 +120,11 @@ Process a complete year of data through all transformation steps.
 Returns a dictionary with processing statistics.
 """
 function process_year_complete(year::Int, config::ProcessingConfig)
+    # Step 0: Validate configuration before processing
+    if !step0_validate_configuration()
+        error("Configuration validation failed. Please check the products.toml file for errors.")
+    end
+
     # Step 1: Ensure product mapping table exists
     step1_ensure_product_mapping(config)
 
@@ -143,6 +148,17 @@ function process_year_complete(year::Int, config::ProcessingConfig)
 
     # Step 8: Apply circularity parameters
     step8_apply_circularity_parameters(year, config)
+end
+
+"""
+    step0_validate_configuration()
+
+Step 0: Validate the products.toml configuration file before processing.
+Returns true if valid, false otherwise.
+"""
+function step0_validate_configuration()
+    @info "Step 0: Validating products configuration..."
+    return AnalysisConfigLoader.validate_product_config()
 end
 
 """
@@ -452,6 +468,11 @@ Process all years in the configured range.
 function process_all_years(config::ProcessingConfig)
     start_year, end_year = config.year_range
 
+    # Validate configuration before processing any years
+    if !step0_validate_configuration()
+        error("Configuration validation failed. Please check the products.toml file for errors.")
+    end
+
     # Ensure database structure
     ensure_processed_db_structure(config)
 
@@ -466,6 +487,7 @@ export ProcessingConfig,
        process_year_complete,
        process_all_years,
        ensure_processed_db_structure,
+       step0_validate_configuration,
        step1_ensure_product_mapping,
        step2_process_unit_conversions,
        step3_process_production_data,

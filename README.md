@@ -8,10 +8,11 @@ https://doi.org/10.17605/OSF.IO/U6SF3
 Detailed documentation is available in the [`docs/`](docs/) folder:
 
 - **[Methodology](docs/methodology.md)**: Research approach, theoretical framework, and analytical methods
+- **[Configuration Guide](docs/configuration-guide.md)**: Step-by-step guide for analysts to setup an analysis and understand the configuration file format
 - **[Data Sources](docs/data-sources.md)**: Details about PRODCOM and COMEXT datasets, indicators, and known issues
 - **[Raw Database Schema](docs/database-schema-raw.md)**: Structure of the raw data tables (PRODCOM/COMEXT)
 - **[Processed Database Schema](docs/database-schema-processed.md)**: Structure of the transformed analysis tables
-- **[Parameters Reference](docs/parameters-reference.md)**: Guide to configuring ANALYSIS_PARAMETERS (metadata, structure, validation)
+- **[Parameters Reference](docs/parameters-reference.md)**: Metadata reference with detailed descriptions of parameter meanings and valid values
 
 ## Architecture Overview
 
@@ -34,6 +35,20 @@ CirQuant has been refactored to use the external ProdcomAPI package for fetching
   - Executes PRQL queries for flexible data extraction
   - Maps between PRODCOM and HS product classifications
   - Calculates apparent consumption and circularity metrics
+
+## Configuration
+
+CirQuant uses a configuration file (`config/products.toml`) to define products and their parameters. Before using the system:
+
+1. Review the product definitions in `config/products.toml`
+2. Add or modify products as needed
+3. Validate the configuration:
+   ```julia
+   using CirQuant
+   AnalysisConfigLoader.validate_product_config()
+   ```
+
+See the [Configuration Guide](docs/configuration-guide.md) for detailed instructions.
 
 ## Usage
 
@@ -140,31 +155,24 @@ results = CircularityProcessor.process_year_data(
 
 ### Parameter Management
 
-CirQuant uses a centralized `ANALYSIS_PARAMETERS` constant to manage all analysis parameters, avoiding hardcoded values and ensuring reproducibility. This constant is defined in the main CirQuant module and contains:
+CirQuant loads all analysis parameters from the `config/products.toml` configuration file. This includes:
 
-- **Circularity rates**: Current and potential material recirculation percentages
+- **Circularity rates**: Current and potential material recirculation percentages for each product
 - **Product weights**: Conversion factors for different units (pieces to tonnes)
-- **Trade parameters**: Intra-EU vs Extra-EU trade distribution assumptions
-- **Recovery efficiency**: Material recovery rates by recycling method
 
-These parameters are automatically stored in the processed database during transformation, creating parameter tables that:
+These parameters are:
+- Loaded automatically when the module starts
+- Validated to ensure completeness and consistency
+- Stored in the processed database during transformation
+
+Parameter tables created in processed database:
+- `parameters_circularity_rate`: Product-specific circularity rates
+- `parameters_recovery_efficiency`: Material recovery rates (if configured)
+
+Configuration benefits:
 - Enable exact reproduction of analysis results
-- Track parameter changes over time
-- Support scenario comparisons
-
-Example of accessing parameters:
-```julia
-# View default analysis parameters
-CirQuant.ANALYSIS_PARAMETERS
-
-# Parameters are automatically used during processing
-process_raw_to_processed()  # Uses ANALYSIS_PARAMETERS internally
-
-# Parameter tables created in processed database:
-# - parameters_circularity_rate
-# - parameters_trade_share
-# - parameters_recovery_efficiency
-```
+- Track parameter changes through version control
+- Support easy updates without code changes
 
 ### Raw Database Structure
 

@@ -182,6 +182,38 @@ derive {
 
 This approach allows dynamic recalculation of indicators when parameters are updated.
 
+### Configuration File System
+
+As of the latest version, CirQuant has moved from hardcoded parameters to a configuration-driven approach:
+
+1. **Central Configuration File**: All product definitions and parameters are stored in `config/products.toml`
+2. **Automatic Loading**: Parameters are loaded at module initialization using `AnalysisConfigLoader`
+3. **Validation**: Configuration is validated before any data processing begins
+4. **Flexibility**: Products can be added, modified, or removed without changing code
+
+The configuration file structure:
+```toml
+[products.product_key]
+id = 1
+name = "Product Name"
+prodcom_codes = ["XX.XX.XX.XX"]
+hs_codes = ["XXXX.XX"]
+
+[products.product_key.parameters]
+weight_kg = 100.0
+unit = "piece"
+current_circularity_rate = 5.0
+potential_circularity_rate = 45.0
+```
+
+This approach provides:
+- **Separation of concerns**: Configuration separate from code
+- **Easy maintenance**: Non-technical users can update parameters
+- **Version control**: Changes to parameters are tracked in git
+- **Validation**: Automatic checking for completeness and consistency
+
+For detailed configuration instructions, see the [Configuration Guide](configuration-guide.md).
+
 ## Limitations and Assumptions
 
 ### Data Limitations
@@ -225,24 +257,7 @@ Detailed database structures are documented in:
 - [Raw Database Schema](database-schema-raw.md)
 - [Processed Database Schema](database-schema-processed.md)
 
-## Future Enhancements
 
-### Planned Improvements
-
-1. **Additional indicators**:
-   - Recycled content percentages
-   - Product lifespan estimates
-   - Material composition data
-
-2. **Enhanced analytics**:
-   - Machine learning for gap filling
-   - Scenario modeling
-   - Policy impact assessment
-
-3. **Broader coverage**:
-   - Additional product categories
-   - Non-EU comparison countries
-   - Sub-national regional analysis
 
 ## References
 

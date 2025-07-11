@@ -28,9 +28,46 @@ Load analysis parameters from the products.toml configuration file.
 - Format as ANALYSIS_PARAMETERS structure
 """
 function load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
-    # TODO: Implement loading of analysis parameters from TOML
-    # For now, return empty placeholder
-    return Dict{String, Any}()
+    # Read the TOML file
+    config = TOML.parsefile(config_path)
+
+    # Initialize the dictionaries
+    current_circularity_rates = Dict{String, Float64}()
+    potential_circularity_rates = Dict{String, Float64}()
+    product_weights_tonnes = Dict{String, Float64}()
+
+    # Extract products section
+    products = get(config, "products", Dict())
+
+    # Process each product
+    for (key, product_data) in products
+        # Get PRODCOM codes and remove dots
+        prodcom_codes = product_data["prodcom_codes"]
+
+        for prodcom_code in prodcom_codes
+            # Remove dots from PRODCOM code
+            clean_code = replace(prodcom_code, "." => "")
+
+            # Get parameters
+            params = product_data["parameters"]
+
+            # Add circularity rates
+            current_circularity_rates[clean_code] = params["current_circularity_rate"]
+            potential_circularity_rates[clean_code] = params["potential_circularity_rate"]
+
+            # Convert weight from kg to tonnes
+            weight_tonnes = params["weight_kg"] / 1000.0
+            product_weights_tonnes[clean_code] = weight_tonnes
+        end
+    end
+
+    # Create the final dictionary structure matching ANALYSIS_PARAMETERS
+    return Dict{String, Any}(
+        "current_circularity_rates" => current_circularity_rates,
+        "potential_circularity_rates" => potential_circularity_rates,
+        "product_weights_tonnes" => product_weights_tonnes,
+        "placeholder_for_future_params" => Dict{String, Any}()
+    )
 end
 
 """
@@ -72,9 +109,9 @@ function load_product_mappings(config_path::String = PRODUCTS_CONFIG_PATH)
         push!(product_ids, product_data["id"])
         push!(product_names, product_data["name"])
 
-        # Handle PRODCOM codes - join multiple codes with dots
+        # Handle PRODCOM codes - take the first (and currently only) code
         prodcom_codes = product_data["prodcom_codes"]
-        prodcom_code_str = join(prodcom_codes, ",")
+        prodcom_code_str = prodcom_codes[1]  # Each product has exactly one PRODCOM code
         push!(prodcom_codes_list, prodcom_code_str)
 
         # Handle HS codes - join multiple codes with commas
@@ -118,9 +155,200 @@ Validate the products.toml configuration file to ensure all required information
 - Potential rates >= current rates
 """
 function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
-    # TODO: Implement validation logic
-    # For now, return true as placeholder
-    return true
+    # Track validation results
+    is_valid = true
+    errors = String[]
+    warnings = String[]
+
+    # Try to parse the TOML file
+    config = try
+        TOML.parsefile(config_path)
+    catch e
+        push!(errors, "Failed to parse TOML file: $e")
+        @error "Configuration file parsing failed" exception=e
+        return false
+    end
+
+    # Check if products section exists
+    if !haskey(config, "products")
+        push!(errors, "Missing 'products' section in configuration file")
+        @error "No products section found in configuration"
+        return false
+    end
+
+    products = config["products"]
+
+    # Track seen IDs to check for duplicates
+    seen_ids = Set{Int}()
+    seen_prodcom_codes = Set{String}()
+
+    # Required fields for each product
+    required_product_fields = ["id", "name", "prodcom_codes", "hs_codes", "parameters"]
+    required_param_fields = ["weight_kg", "unit", "current_circularity_rate", "potential_circularity_rate"]
+
+    # Validate each product
+    for (product_key, product_data) in products
+        # Check required fields
+        for field in required_product_fields
+            if !haskey(product_data, field)
+                push!(errors, "Product '$product_key' missing required field: $field")
+                is_valid = false
+            end
+        end
+
+        # Skip further validation if basic fields are missing
+        if !all(field -> haskey(product_data, field), required_product_fields)
+            continue
+        end
+
+        # Validate ID
+        id = product_data["id"]
+        if !(id isa Integer)
+            push!(errors, "Product '$product_key' has invalid id type (must be integer): $(typeof(id))")
+            is_valid = false
+        elseif id in seen_ids
+            push!(errors, "Duplicate product ID found: $id")
+            is_valid = false
+        else
+            push!(seen_ids, id)
+        end
+
+        # Validate name
+        if !(product_data["name"] isa String) || isempty(product_data["name"])
+            push!(errors, "Product '$product_key' has invalid or empty name")
+            is_valid = false
+        end
+
+        # Validate PRODCOM codes
+        prodcom_codes = product_data["prodcom_codes"]
+        if !(prodcom_codes isa Vector)
+            push!(errors, "Product '$product_key' prodcom_codes must be an array")
+            is_valid = false
+        elseif isempty(prodcom_codes)
+            push!(errors, "Product '$product_key' has empty prodcom_codes array")
+            is_valid = false
+        else
+            for code in prodcom_codes
+                if !(code isa String) || isempty(code)
+                    push!(errors, "Product '$product_key' has invalid PRODCOM code: $code")
+                    is_valid = false
+                end
+                # Check for duplicate PRODCOM codes across products
+                clean_code = replace(code, "." => "")
+                if clean_code in seen_prodcom_codes
+                    push!(warnings, "PRODCOM code '$code' appears in multiple products")
+                else
+                    push!(seen_prodcom_codes, clean_code)
+                end
+            end
+        end
+
+        # Validate HS codes
+        hs_codes = product_data["hs_codes"]
+        if !(hs_codes isa Vector)
+            push!(errors, "Product '$product_key' hs_codes must be an array")
+            is_valid = false
+        elseif isempty(hs_codes)
+            push!(errors, "Product '$product_key' has empty hs_codes array")
+            is_valid = false
+        else
+            for code in hs_codes
+                if !(code isa String) || isempty(code)
+                    push!(errors, "Product '$product_key' has invalid HS code: $code")
+                    is_valid = false
+                end
+            end
+        end
+
+        # Validate parameters section
+        params = product_data["parameters"]
+        if !(params isa Dict)
+            push!(errors, "Product '$product_key' parameters must be a dictionary")
+            is_valid = false
+            continue
+        end
+
+        # Check required parameter fields
+        for field in required_param_fields
+            if !haskey(params, field)
+                push!(errors, "Product '$product_key' missing parameter: $field")
+                is_valid = false
+            end
+        end
+
+        # Validate parameter values if they exist
+        if haskey(params, "weight_kg")
+            weight = params["weight_kg"]
+            if !(weight isa Number)
+                push!(errors, "Product '$product_key' weight_kg must be a number, got: $(typeof(weight))")
+                is_valid = false
+            elseif weight <= 0
+                push!(errors, "Product '$product_key' weight_kg must be positive, got: $weight")
+                is_valid = false
+            end
+        end
+
+        if haskey(params, "unit")
+            unit = params["unit"]
+            if !(unit isa String) || isempty(unit)
+                push!(errors, "Product '$product_key' unit must be a non-empty string")
+                is_valid = false
+            elseif unit != "piece"
+                push!(warnings, "Product '$product_key' has unit '$unit' - verify conversion logic is appropriate")
+            end
+        end
+
+        if haskey(params, "current_circularity_rate")
+            current_rate = params["current_circularity_rate"]
+            if !(current_rate isa Number)
+                push!(errors, "Product '$product_key' current_circularity_rate must be a number")
+                is_valid = false
+            elseif current_rate < 0 || current_rate > 100
+                push!(errors, "Product '$product_key' current_circularity_rate must be between 0 and 100, got: $current_rate")
+                is_valid = false
+            end
+        end
+
+        if haskey(params, "potential_circularity_rate")
+            potential_rate = params["potential_circularity_rate"]
+            if !(potential_rate isa Number)
+                push!(errors, "Product '$product_key' potential_circularity_rate must be a number")
+                is_valid = false
+            elseif potential_rate < 0 || potential_rate > 100
+                push!(errors, "Product '$product_key' potential_circularity_rate must be between 0 and 100, got: $potential_rate")
+                is_valid = false
+            end
+
+            # Check that potential >= current
+            if haskey(params, "current_circularity_rate") &&
+               (current_rate isa Number) && (potential_rate isa Number) &&
+               potential_rate < params["current_circularity_rate"]
+                push!(errors, "Product '$product_key' potential_circularity_rate ($potential_rate) must be >= current_circularity_rate ($(params["current_circularity_rate"]))")
+                is_valid = false
+            end
+        end
+    end
+
+    # Report results
+    if !isempty(errors)
+        @error "Configuration validation failed with $(length(errors)) error(s):"
+        for error in errors
+            @error "  - $error"
+        end
+    end
+
+    if !isempty(warnings)
+        @warn "Configuration validation produced $(length(warnings)) warning(s):"
+        for warning in warnings
+            @warn "  - $warning"
+        end
+    end
+
+    if is_valid && isempty(errors)
+        @info "Configuration validation passed successfully for $(length(products)) products"
+    end
+
+    return is_valid
 end
 
 """

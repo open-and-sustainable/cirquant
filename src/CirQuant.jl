@@ -9,68 +9,9 @@ const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_2002-2023.duckdb
 # Test database for development (contains only 2002 data)
 const DB_PATH_TEST = "CirQuant-database/raw/test.duckdb"
 
-# External parameters for circularity calculations - PLACEHOLDERS
-# TODO: These values need to be populated from literature/policy sources
-const ANALYSIS_PARAMETERS = Dict{String, Any}(
-    # Current circularity rates by product (%)
-    "current_circularity_rates" => Dict{String, Float64}(
-
-        "28211330" => 5.0,    # Heat pumps - high metal content
-        "27114000" => 3.0,    # PV panels - emerging recycling
-        "26201230" => 2.0,    # Printers - some component reuse
-        "26201130" => 1.0,    # ICT - Smartphones - limited recycling
-        "26201150" => 1.0,    # ICT - Other phones
-        "26201300" => 2.0,    # ICT - Portable computers
-        "26201400" => 2.0,    # ICT - Other computers
-        "26201600" => 3.0,    # ICT - Monitors, I/O units
-        "26201700" => 2.0,    # ICT - Storage units
-        "26201800" => 2.0,    # ICT - Other units
-        "2620" => 2.0,        # Full ICT (PRODCOM 26.20)
-        "27202300" => 10.0,   # Batteries - Li-ion - regulated recycling
-        "27202400" => 8.0     # Batteries - Other - established recycling
-    ),
-
-    # Potential circularity rates with best practices (%)
-    "potential_circularity_rates" => Dict{String, Float64}(
-
-        "28211330" => 45.0,   # Heat pumps - high recycling potential
-        "27114000" => 65.0,   # PV panels - developing technologies
-        "26201230" => 40.0,   # Printers - modular design potential
-        "26201130" => 35.0,   # ICT - Smartphones - valuable materials
-        "26201150" => 30.0,   # ICT - Other phones
-        "26201300" => 45.0,   # ICT - Portable computers
-        "26201400" => 45.0,   # ICT - Other computers
-        "26201600" => 50.0,   # ICT - Monitors, I/O units
-        "26201700" => 40.0,   # ICT - Storage units
-        "26201800" => 35.0,   # ICT - Other units
-        "2620" => 40.0,       # Full ICT (PRODCOM 26.20)
-        "27202300" => 70.0,   # Batteries - Li-ion - EU regulations
-        "27202400" => 60.0    # Batteries - Other - mature recycling
-    ),
-
-    # Product weight assumptions for unit conversions (tonnes per piece)
-    "product_weights_tonnes" => Dict{String, Float64}(
-
-        "28211330" => 0.100,           # Heat pumps ~100kg
-        "27114000" => 0.020,           # PV panels ~20kg
-        "26201230" => 0.015,           # Printers ~15kg
-        "26201130" => 0.0002,          # ICT - Smartphones ~200g
-        "26201150" => 0.0003,          # ICT - Other phones ~300g
-        "26201300" => 0.002,           # ICT - Portable computers ~2kg
-        "26201400" => 0.008,           # ICT - Other computers ~8kg
-        "26201600" => 0.005,           # ICT - Monitors, I/O units ~5kg
-        "26201700" => 0.001,           # ICT - Storage units ~1kg
-        "26201800" => 0.003,           # ICT - Other units ~3kg
-        "2620" => 0.005,               # Full ICT (prefix) ~5kg average
-        "27202300" => 0.0005,          # Batteries - Li-ion ~500g
-        "27202400" => 0.001,           # Batteries - Other ~1kg
-        "2720" => 0.0008,              # Batteries (prefix) ~800g average
-        "battery_cell" => 0.0003       # Battery cells ~300g
-    ),
-
-    # Other parameters as needed
-    "placeholder_for_future_params" => Dict{String, Any}()
-)
+# External parameters for circularity calculations - loaded from config/products.toml
+# This will be initialized after module loading
+global ANALYSIS_PARAMETERS = Dict{String, Any}()
 
 # Include and use the modules
 include("utils/DatabaseAccess.jl")
@@ -89,6 +30,9 @@ using .ComextDataFetch
 using .CircularityProcessor
 using .ProdcomUnitConverter
 using .DataProcessor
+
+# Load analysis parameters from configuration file
+global ANALYSIS_PARAMETERS = AnalysisConfigLoader.load_analysis_parameters()
 
 
 """

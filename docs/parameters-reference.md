@@ -1,8 +1,14 @@
 # Parameters Reference Guide
 
+## Purpose
+
+This document serves as a metadata reference, providing detailed descriptions of all parameters used in CirQuant's analysis, their meanings, valid ranges, and data types. It explains WHAT each parameter represents and WHY it's important for the analysis.
+
+For practical instructions on HOW to set up and configure an analysis, see the [Configuration Guide](configuration-guide.md).
+
 ## Overview
 
-This document describes the structure and metadata of parameters used in the `ANALYSIS_PARAMETERS` constant. These parameters control various aspects of the circularity analysis and are stored in the processed database for reproducibility.
+The parameters described in this reference are defined in the `config/products.toml` configuration file and are automatically loaded into the `ANALYSIS_PARAMETERS` structure at runtime. These parameters control various aspects of the circularity analysis and are stored in the processed database for reproducibility.
 
 ## Parameter Categories
 
@@ -100,22 +106,24 @@ This document describes the structure and metadata of parameters used in the `AN
   )
   ```
 
-## Adding New Parameters
+## Parameter Sources and Basis
 
 ### 1. Product-Specific Parameters
 
-To add parameters for a new product:
-1. Identify the PRODCOM code (remove dots)
-2. Add entries in relevant parameter dictionaries
-3. Ensure consistency across related parameters
+Product-specific parameters in CirQuant are based on:
+- Industry reports and technical specifications for product weights
+- EU policy documents and circular economy action plans for circularity rates
+- Scientific literature on material recovery and recycling technologies
+- Regulatory frameworks (e.g., EU Battery Regulation, WEEE Directive)
 
-### 2. New Parameter Categories
+Each parameter represents measurable physical or policy-driven characteristics of products that affect their circular economy potential.
 
-To add a new parameter category:
-1. Add the new dictionary to `ANALYSIS_PARAMETERS`
-2. Create corresponding database table structure in `DataProcessor`
-3. Update PRQL queries to use new parameters
-4. Document in this reference guide
+### 2. Parameter Processing
+
+When loaded into the system, parameters undergo specific transformations:
+- PRODCOM codes: Dots are removed for internal consistency (e.g., "28.21.13.30" → "28211330")
+- Weight units: Kilograms are converted to tonnes for calculations
+- Validation: All values are checked against their defined ranges and constraints
 
 ### 3. Parameter Validation
 
@@ -184,31 +192,29 @@ derive {
 
 ## Best Practices
 
-1. **Use Meaningful Keys**: Product codes should match PRODCOM standards
-2. **Document Sources**: Add comments for parameter values from literature
-3. **Version Control**: Parameters are part of code for tracking changes
-4. **Validate Ranges**: Ensure percentages are 0-100, shares sum to 1
-5. **Default Values**: Always provide sensible defaults
-6. **Consistent Units**: Weights in tonnes, rates as percentages
+1. **Use Meaningful Keys**: Product codes should match PRODCOM standards (with dots)
+2. **Document Sources**: Consider adding source comments in the TOML file
+3. **Version Control**: The `config/products.toml` file is tracked in git
+4. **Validate Ranges**: Ensure percentages are 0-100, potential ≥ current
+5. **Consistent Units**: Define weights in kg (converted to tonnes internally)
+6. **Single Configuration**: All product parameters in one TOML file
+7. **Validation First**: Always validate configuration before processing
 
-## Future Extensions
 
-Planned parameter categories:
-- Product lifespan estimates
-- Material composition percentages
-- Regional adjustment factors
-- Technology adoption curves
-- Price elasticity factors
 
-## Parameter Update Workflow
+## Parameter Versioning and Traceability
 
-1. Update values in `CirQuant.jl` ANALYSIS_PARAMETERS constant
-2. Run processing to store in database
-3. Use PRQL queries to apply updated parameters
-4. Document significant changes in git commits
+Parameters are versioned through the git repository, allowing:
+- Historical tracking of parameter changes
+- Reproducibility of past analyses
+- Documentation of parameter evolution over time
+- Comparison of results using different parameter sets
+
+All parameter values are stored in the processed database alongside results, ensuring complete traceability of the analysis conditions used to generate any specific output.
 
 ## Related Documentation
 
+- [Configuration Guide](configuration-guide.md) - Step-by-step instructions for setting up an analysis
 - [Methodology](methodology.md) - How parameters are used in analysis
 - [Database Schema - Processed](database-schema-processed.md) - Parameter table structures
 - [Data Sources](data-sources.md) - Context for parameter selection
