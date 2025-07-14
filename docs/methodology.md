@@ -2,7 +2,7 @@
 
 ## Research Overview
 
-CirQuant (Circular Economy Quantification) is a data processing and analysis framework designed to measure and track circular economy indicators for strategic product categories in the European Union. The project focuses on quantifying material flows, production patterns, and trade dynamics to assess progress toward circular economy goals.
+CirQuant (Circular Economy Quantification) is a data processing and analysis framework designed to measure and track circular economy indicators for strategic product categories in the European Union. The project focuses on quantifying potential material flows, production patterns, and trade dynamics to assess potentials of the circular economy transition.
 
 ## Theoretical Framework
 
@@ -56,7 +56,26 @@ The methodology integrates two complementary data sources:
 Product codes are mapped between systems:
 - PRODCOM codes (e.g., "27.11.40.00") → HS codes (e.g., "8541.43")
 - Many-to-many relationships handled through mapping tables
-- Aggregation rules defined for consistent analysis
+
+### Country Code Harmonization
+
+The system addresses differences in geographic coding between data sources:
+- **PRODCOM**: Uses numeric codes (e.g., "001" for France, "004" for Germany)
+- **COMEXT**: Uses ISO 2-letter codes (e.g., "FR" for France, "DE" for Germany)
+
+A country code mapping table is created to harmonize these differences, ensuring data from both sources can be properly merged by geography.
+
+### Trade Data Consolidation
+
+When processing trade statistics, both PRODCOM and COMEXT contain import/export data:
+- **PRODCOM indicators**: IMPVAL, EXPVAL (values), IMPQNT, EXPQNT (quantities)
+- **COMEXT indicators**: VALUE_EUR, QUANTITY_KG for flows 1 (imports) and 2 (exports)
+
+The system prioritizes data sources as follows:
+1. **Primary source**: COMEXT data is used for all trade statistics when available
+2. **Fallback**: PRODCOM trade indicators are only used when COMEXT data is missing for specific product/year combinations
+
+This approach ensures consistency and avoids potential discrepancies between the two sources, as COMEXT provides more comprehensive coverage at the HS code level.
 
 ## Analytical Framework
 
@@ -86,15 +105,13 @@ Product codes are mapped between systems:
 ### 1. Data Acquisition
 
 Automated fetching from Eurostat APIs with:
-- Rate limiting (0.5s between requests)
-- Error handling and retry logic
-- Comprehensive logging
+- Rate limiting
+- Error handling
 
 ### 2. Data Cleaning
 
 - Unit harmonization (converting all quantities to tonnes where possible)
 - Missing value handling
-- Outlier detection
 - Consistency checks between related indicators
 
 ### 3. Data Storage - Raw Database
@@ -137,28 +154,26 @@ Automated fetching from Eurostat APIs with:
 
 ## Parameter Management
 
-### ANALYSIS_PARAMETERS Constant
+### ANALYSIS_PARAMETERS Global Variable
 
-To avoid hardcoding values and ensure reproducibility, the system uses a centralized `ANALYSIS_PARAMETERS` constant defined in the main CirQuant.jl module. This approach provides:
+To avoid hardcoding values and ensure reproducibility, the system uses a centralized `ANALYSIS_PARAMETERS` global variable in the CirQuant module. This variable is populated at module initialization by loading parameters from the `config/products.toml` file. This approach provides:
 
 1. **Centralized configuration**: All analysis parameters in one place
 2. **Traceability**: Parameters are stored in the processed database
 3. **Flexibility**: Easy to update parameters without modifying code
 4. **Transparency**: Clear record of assumptions used in analysis
 
-The `ANALYSIS_PARAMETERS` dictionary contains:
+The configuration dictionary contains:
 
-- **Current circularity rates**: Existing material recirculation percentages by product
-- **Potential circularity rates**: Achievable rates with best practices/innovations
-- **Product weights**: Conversion factors for units to tonnes (e.g., pieces to kg)
-- **Recovery efficiency**: Material recovery rates by recycling method
+- **Current circularity rates**: Existing material recirculation percentages by product (each product has its own explicit rate)
+- **Potential circularity rates**: Achievable rates with best practices/innovations (each product has its own explicit rate)
+- **Product weights**: Conversion factors from kilograms to tonnes for each product
 
 ### Parameter Storage in Database
 
 During processing, these parameters are automatically stored in the processed database as parameter tables:
-
-1. **`parameters_circularity_rate`**: Contains product-specific circularity rates for each product
-2. **`parameters_recovery_efficiency`**: Recycling method effectiveness rates
+- **`parameters_circularity_rate`**: Contains product-specific circularity rates for each product (always created)
+- **`parameters_recovery_efficiency`**: Contains recovery efficiency rates by method (only created if recovery_efficiency parameters are provided in the configuration)
 
 This ensures that:
 - Analysis results can be reproduced exactly
@@ -175,7 +190,7 @@ join pcr = parameters_circularity_rate (ci.product_code == pcr.product_code)
 derive {
     current_circularity_rate_pct = pcr.current_circularity_rate,
     potential_circularity_rate_pct = pcr.potential_circularity_rate,
-    estimated_material_savings_tonnes = apparent_consumption_tonnes * 
+    estimated_material_savings_tonnes = apparent_consumption_tonnes *
         (pcr.potential_circularity_rate - pcr.current_circularity_rate) / 100.0
 }
 ```

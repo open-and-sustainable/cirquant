@@ -117,7 +117,7 @@ The system automatically validates the configuration when processing starts. To 
 
 ```julia
 using CirQuant
-AnalysisConfigLoader.validate_product_config()
+validate_product_config()
 ```
 
 ### Validation Checks
@@ -212,7 +212,7 @@ Only actual products should be in the configuration. Do not add:
 isfile("config/products.toml")
 
 # Validate configuration
-AnalysisConfigLoader.validate_product_config()
+validate_product_config()
 ```
 
 ### Changes not taking effect
@@ -249,7 +249,7 @@ potential_circularity_rate = 60.0
 3. **Validate**:
 ```julia
 using CirQuant
-AnalysisConfigLoader.validate_product_config()
+validate_product_config()
 ```
 
 4. **Update database**:

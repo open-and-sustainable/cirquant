@@ -18,16 +18,17 @@ CirQuant fetches data from two primary Eurostat databases to analyze circular ec
 
 - **DS-056121**: PRODCOM annual data by PRODCOM_LIST (NACE Rev. 2) - EU aggregates (from 2017)
   - Contains only PRODQNT and QNTUNIT indicators
-  - **Note**: This dataset often appears empty because production quantity data is frequently not reported at the aggregate EU level for confidentiality reasons
+  - **Note**: This dataset is NOT fetched by default. It must be explicitly requested using the `custom_datasets` parameter
+  - When fetched, it often returns empty results because production quantity data is frequently not reported at the aggregate EU level for confidentiality reasons
 
 ### PRODCOM Indicators
 
 - `PRODVAL`: Production value in EUR
 - `PRODQNT`: Production quantity
-- `EXPVAL`: Export value in EUR  
-- `EXPQNT`: Export quantity
-- `IMPVAL`: Import value in EUR
-- `IMPQNT`: Import quantity
+- `EXPVAL`: Export value in EUR (fetched but typically not used - see Trade Data Priority)
+- `EXPQNT`: Export quantity (fetched but typically not used - see Trade Data Priority)
+- `IMPVAL`: Import value in EUR (fetched but typically not used - see Trade Data Priority)
+- `IMPQNT`: Import quantity (fetched but typically not used - see Trade Data Priority)
 - `QNTUNIT`: Unit of measurement (stored as string values)
 
 ## COMEXT Data
@@ -66,6 +67,13 @@ Products are mapped between PRODCOM codes (8-10 digits) and HS codes (6 digits) 
 
 ## Data Fetching Strategy
 
+### Trade Data Priority
+When processing trade data, the system prioritizes sources as follows:
+- **Primary source**: COMEXT data (DS-059341) for all import/export values and quantities
+- **Fallback source**: PRODCOM trade indicators (IMPVAL, EXPVAL, IMPQNT, EXPQNT) are only used when COMEXT data is unavailable for a specific product/year combination
+
+This approach ensures consistency in trade statistics and avoids potential discrepancies between the two data sources. COMEXT is preferred as it provides more comprehensive coverage of trade flows at the HS code level.
+
 ### Rate Limiting
 Both APIs implement rate limiting. The system includes:
 - 0.5 second delay between successful API calls
@@ -80,9 +88,23 @@ Both APIs implement rate limiting. The system includes:
 - Backup CSV files are created if database writes fail
 - Empty results are expected for some product/year combinations
 
+### Fetching Non-Default Datasets
+
+To fetch DS-056121 (which is not included by default), use the `custom_datasets` parameter:
+
+```julia
+# Fetch only DS-056121
+fetch_prodcom_data("2017-2023", ["ds-056121"])
+
+# Fetch both DS-056120 and DS-056121
+fetch_prodcom_data("2017-2023", ["ds-056120", "ds-056121"])
+```
+
+Note: DS-056121 often returns empty results due to confidentiality restrictions on EU aggregate production quantities.
+
 ## Known Issues and Limitations
 
-1. **DS-056121 Empty Data**: EU aggregate production quantities are often not published due to:
+1. **DS-056121 Not Fetched by Default**: This dataset is only queried when explicitly requested via `custom_datasets` parameter. Even when fetched, EU aggregate production quantities are often not published due to:
    - Statistical confidentiality rules
    - Insufficient country coverage
    - Data quality thresholds

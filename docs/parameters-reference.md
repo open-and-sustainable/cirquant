@@ -8,7 +8,7 @@ For practical instructions on HOW to set up and configure an analysis, see the [
 
 ## Overview
 
-The parameters described in this reference are defined in the `config/products.toml` configuration file and are automatically loaded into the `ANALYSIS_PARAMETERS` structure at runtime. These parameters control various aspects of the circularity analysis and are stored in the processed database for reproducibility.
+The parameters described in this reference are defined in the `config/products.toml` configuration file. At runtime, these parameters are loaded from the TOML file and populated into the `ANALYSIS_PARAMETERS` global variable in the CirQuant module. These parameters control various aspects of the circularity analysis and are stored in the processed database for reproducibility.
 
 ## Parameter Categories
 
@@ -18,32 +18,28 @@ The parameters described in this reference are defined in the `config/products.t
 - **Type**: `Dict{String, Float64}`
 - **Purpose**: Defines the current material recirculation rate for each product
 - **Structure**:
-  - Keys: Product codes (PRODCOM format without dots) or "default"
+  - Keys: Product codes (PRODCOM format without dots)
   - Values: Percentage values (0.0 to 100.0)
 - **Required Keys**:
-  - Product codes (e.g., "28211330", "27114000"): Each product must have a specified rate
-- **Structure**:
-  - Product-specific codes (e.g., "28211330" for heat pumps)
+  - Each product must have its own explicitly defined rate - there are no defaults
 - **Example**:
   ```julia
   "current_circularity_rates" => Dict{String, Float64}(
-      "default" => 0.0,
-      "28211330" => 5.5,  # Heat pumps
-      "27114000" => 3.2   # PV panels
+      "28211330" => 5.0,  # Heat pumps
+      "27114000" => 3.0   # PV panels
   )
   ```
 
 #### `potential_circularity_rates`
 - **Type**: `Dict{String, Float64}`
 - **Purpose**: Defines achievable recirculation rates with best practices/innovations
-- **Structure**: Same as `current_circularity_rates`
+- **Structure**: Same as `current_circularity_rates` - product codes without dots
 - **Required Keys**:
-  - Product codes matching those in `current_circularity_rates`
+  - Each product must have its own explicitly defined rate matching those in `current_circularity_rates`
 - **Constraints**: Values should be ≥ corresponding `current_circularity_rates`
 - **Example**:
   ```julia
   "potential_circularity_rates" => Dict{String, Float64}(
-      "default" => 30.0,
       "28211330" => 45.0,  # Heat pumps potential
       "27114000" => 65.0   # PV panels potential
   )
@@ -55,34 +51,27 @@ The parameters described in this reference are defined in the `config/products.t
 - **Type**: `Dict{String, Float64}`
 - **Purpose**: Convert piece counts to tonnes for products sold by unit
 - **Structure**:
-  - Keys: Product codes (full or prefix) or special identifiers
+  - Keys: Product codes (PRODCOM format without dots)
   - Values: Weight in tonnes per piece
 - **Required Keys**:
-  - Product codes: Each product must have a specified weight
-- **Special Keys**:
-  - Product code prefixes (e.g., "2720" for all battery codes starting with 2720)
-  - Category identifiers (e.g., "battery_cell" for specific component types)
-- **Matching Rules**: 
-  1. Exact product code match
-  2. Longest matching prefix
-  3. Category identifier
-  4. Default value
+  - Each product must have its own explicitly defined weight - there are no defaults or prefix matching
 - **Example**:
   ```julia
   "product_weights_tonnes" => Dict{String, Float64}(
       "28211330" => 0.100,           # Heat pumps ~100kg
       "27114000" => 0.020,           # PV panels ~20kg
       "26201230" => 0.015,           # Printers ~15kg
-      "2720" => 0.0008,              # Batteries (prefix) ~800g average
-      "battery_cell" => 0.0003       # Battery cells ~300g
+      "27202300" => 0.0005,          # Li-ion batteries ~500g
+      "27202400" => 0.001            # Other batteries ~1kg
   )
   ```
 
 ### 3. Recovery Efficiency Parameters
 
-#### `recovery_efficiency` (Optional)
+#### `recovery_efficiency` (Optional - Not Currently Used)
 - **Type**: `Dict{String, Dict{String, Any}}`
-- **Purpose**: Material recovery rates by recycling method
+- **Purpose**: Material recovery rates by recycling method (for future use)
+- **Note**: This parameter is not present in the current configuration and the `parameters_recovery_efficiency` table is only created if this parameter is provided
 - **Structure**:
   - Top-level keys: Recovery method names
   - Values: Dictionary with method details
@@ -91,20 +80,6 @@ The parameters described in this reference are defined in the `config/products.t
   - `"material_type"` (String, optional): Specific material category
   - `"applicable_products"` (Array{String}, optional): Product codes
   - `"notes"` (String, optional): Additional information
-- **Example**:
-  ```julia
-  "recovery_efficiency" => Dict{String, Dict{String, Any}}(
-      "mechanical_recycling" => Dict(
-          "efficiency_rate" => 0.85,
-          "material_type" => "metals",
-          "applicable_products" => ["2720", "2825"]
-      ),
-      "chemical_recycling" => Dict(
-          "efficiency_rate" => 0.65,
-          "material_type" => "plastics"
-      )
-  )
-  ```
 
 ## Parameter Sources and Basis
 
@@ -139,9 +114,11 @@ Parameters are stored in the processed database as separate tables:
 
 1. **`parameters_circularity_rate`**
    - Stores product-specific rates with one row per product
-   - Includes product_code, current_rate, potential_rate, and timestamp
+   - Includes product_code, current_circularity_rate, potential_circularity_rate, and last_updated timestamp
+   - Created automatically during data processing
 
-2. **`parameters_recovery_efficiency`**
+2. **`parameters_recovery_efficiency`** (Optional)
+   - Only created if recovery_efficiency parameters are provided in the configuration
    - One row per recovery method
    - Includes efficiency rate and metadata
 
@@ -186,7 +163,7 @@ derive {
 ### Key Points
 
 - **Join on product_code**: Each query joins the parameters table with data tables using the product code
-- **No defaults needed**: Since all products have specified rates, no fallback logic is required
+- **Every product has explicit rates**: Each product in the configuration has its own defined rates - no defaults or fallback values
 - **Left joins**: Use left joins to handle cases where data might exist for products not in parameters
 - **COALESCE**: Used in full outer joins to handle nulls from either side
 

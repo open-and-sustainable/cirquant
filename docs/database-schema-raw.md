@@ -59,7 +59,7 @@ Same structure as DS-056120 but typically contains only:
 - `PRODQNT`: Production quantity
 - `QNTUNIT`: Unit of measurement
 
-**Note**: Often empty due to confidentiality restrictions on EU aggregate data.
+**Note**: Often empty due to confidentiality restrictions on EU individual country data.
 
 ## COMEXT Tables
 
@@ -115,8 +115,8 @@ International trade data at 6-digit HS code level.
 
 ### Get all production values for heat pumps in 2020:
 ```sql
-SELECT * FROM prodcom_ds_056120_2020 
-WHERE prodcom_code_original = '28.21.13.30' 
+SELECT * FROM prodcom_ds_056120_2020
+WHERE prodcom_code_original = '28.21.13.30'
   AND indicators = 'PRODVAL';
 ```
 

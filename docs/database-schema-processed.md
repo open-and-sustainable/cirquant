@@ -103,9 +103,9 @@ Stores product-specific circularity rate assumptions used in calculations.
 | potential_circularity_rate | DOUBLE | Achievable rate with innovations for this product (%) |
 | last_updated | VARCHAR | Timestamp of last parameter update |
 
-### Table: `parameters_recovery_efficiency`
+### Table: `parameters_recovery_efficiency` (Optional)
 
-Material recovery efficiency rates by recycling method (if configured).
+Material recovery efficiency rates by recycling method. This table is only created if `recovery_efficiency` parameters are provided in the configuration file.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -125,10 +125,7 @@ Material recovery efficiency rates by recycling method (if configured).
 
 ### Value Calculations
 - All monetary values in EUR
-- Missing values handled through:
-  - Linear interpolation for small gaps
-  - Carry-forward for recent years
-  - Marked as NULL if no reasonable estimate
+- Missing values handled as zero values
 
 ### Derived Indicators
 1. **Apparent Consumption** = Production + Imports - Exports
@@ -138,8 +135,7 @@ Material recovery efficiency rates by recycling method (if configured).
 
 ### Geographic Aggregations
 - Country-level data preserved from source
-- EU27 aggregates calculated as sum of member states
-- Missing country data excluded from EU totals
+- EU27 aggregates reported by EUROSTAT and not computed as sum because individual may be omitted because of condifentiality
 
 ## PRQL Transformation Process
 
@@ -168,20 +164,9 @@ group {product_code, geo, year} (
 )
 ```
 
-## Data Quality Indicators
-
-Each processed table includes quality metadata:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| data_completeness_score | DOUBLE | % of expected data points present |
-| imputation_flag | BOOLEAN | Whether any values were estimated |
-| last_update | TIMESTAMP | When processing last ran |
-| source_tables | VARCHAR | List of raw tables used |
-
 ## Usage Notes
 
-1. **Time Coverage**: 
+1. **Time Coverage**:
    - Production data: 1995-2023 (where available)
    - Trade data: 2002-2023 (COMEXT limitation)
    - Combined indicators: 2002-2023
@@ -189,14 +174,3 @@ Each processed table includes quality metadata:
 2. **Missing Data**:
    - NULL indicates no data available
    - 0 indicates reported zero value
-   - Check imputation_flag for estimated values
-
-3. **Query Performance**:
-   - Indexes on: product_code, geo, year
-   - Pre-aggregated tables for common queries
-   - Partitioned by year for large tables
-
-4. **Updates**:
-   - Full refresh recommended (not incremental)
-   - Processing time: ~30 minutes for all years
-   - Run after new raw data is fetched

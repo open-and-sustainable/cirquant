@@ -235,6 +235,38 @@ function get_product_by_code(code::String, code_type::Symbol=:prodcom_code; db_p
 end
 
 """
+    validate_product_config(config_path::String = joinpath(@__DIR__, "..", "config", "products.toml"))
+
+Validate the product configuration file for completeness and consistency.
+
+# Arguments
+- `config_path::String`: Path to the products.toml configuration file (default: config/products.toml)
+
+# Returns
+- `Bool`: true if validation passes, false otherwise
+
+# Example
+```julia
+# Validate the default configuration
+is_valid = validate_product_config()
+
+# Validate a custom configuration file
+is_valid = validate_product_config("path/to/custom_products.toml")
+```
+
+The validation checks:
+- Required fields are present for each product
+- Data types are correct
+- Values are within valid ranges
+- Product IDs are unique
+- Circularity rates are between 0-100%
+- Potential rate ≥ current rate
+"""
+function validate_product_config(config_path::String = joinpath(@__DIR__, "..", "config", "products.toml"))
+    return AnalysisConfigLoader.validate_product_config(config_path)
+end
+
+"""
     create_circularity_table(year::Int; db_path::String = DB_PATH_PROCESSED, replace::Bool = false)
 
 Creates the main circularity indicators table structure in the processed database for a specific year.
@@ -461,6 +493,7 @@ export fetch_prodcom_data,
     ANALYSIS_PARAMETERS,
     DB_PATH_TEST,
     process_raw_to_processed,
-    process_single_year
+    process_single_year,
+    validate_product_config
 
 end # module CirQuant
