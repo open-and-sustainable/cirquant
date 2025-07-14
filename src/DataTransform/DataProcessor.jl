@@ -31,9 +31,9 @@ Configuration for data processing pipeline
 struct ProcessingConfig
     source_db::String  # Path to raw database
     target_db::String  # Path to processed database
-    year_range::Tuple{Int, Int}
+    year_range::Tuple{Int,Int}
     use_test_mode::Bool
-    analysis_params::Dict{String, Any}
+    analysis_params::Dict{String,Any}
     prql_timeout::Int  # Timeout for PRQL queries in seconds
     cleanup_temp_tables::Bool  # Whether to remove temporary tables after processing
 end
@@ -54,26 +54,26 @@ Create a processing configuration with sensible defaults.
 - `cleanup_temp_tables`: Whether to remove temporary tables after processing (default: true)
 """
 function create_processing_config(;
-    source_db::String = "",
-    target_db::String = "",
-    start_year::Int = 2002,
-    end_year::Int = 2023,
-    use_test_mode::Bool = false,
-    analysis_params::Dict{String, Any} = Dict{String, Any}(),
-    prql_timeout::Int = 300,
-    cleanup_temp_tables::Bool = true
+    source_db::String="",
+    target_db::String="",
+    start_year::Int=2002,
+    end_year::Int=2023,
+    use_test_mode::Bool=false,
+    analysis_params::Dict{String,Any}=Dict{String,Any}(),
+    prql_timeout::Int=300,
+    cleanup_temp_tables::Bool=true
 )
     # Determine database paths
     if isempty(source_db)
         source_db = use_test_mode ?
-            "CirQuant-database/raw/test.duckdb" :
-            "CirQuant-database/raw/CirQuant_2002-2023.duckdb"
+                    "CirQuant-database/raw/test.duckdb" :
+                    "CirQuant-database/raw/CirQuant_2002-2023.duckdb"
     end
 
     if isempty(target_db)
         target_db = use_test_mode ?
-            "CirQuant-database/processed/test_processed.duckdb" :
-            "CirQuant-database/processed/CirQuant_2002-2023.duckdb"
+                    "CirQuant-database/processed/test_processed.duckdb" :
+                    "CirQuant-database/processed/CirQuant_2002-2023.duckdb"
     end
 
     # Use only 2002 if in test mode
@@ -318,44 +318,6 @@ function step7_create_product_aggregates(year::Int, config::ProcessingConfig)
 end
 
 """
-    step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
-
-Step 9: Remove temporary tables created during processing.
-"""
-function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
-    # Check if cleanup is enabled
-    if !config.cleanup_temp_tables
-        @info "Step 9: Skipping cleanup of temporary tables (cleanup_temp_tables=false)"
-        return
-    end
-
-    @info "Step 9: Cleaning up temporary tables for year $year..."
-
-    # List of temporary table suffixes
-    temp_tables = [
-        "prodcom_converted_$(year)",
-        "production_temp_$(year)",
-        "trade_temp_$(year)"
-    ]
-
-    conn = DBInterface.connect(DuckDB.DB, config.target_db)
-
-    try
-        for table_name in temp_tables
-            try
-                DBInterface.execute(conn, "DROP TABLE IF EXISTS $table_name")
-                @info "Dropped temporary table: $table_name"
-            catch e
-                @warn "Failed to drop table $table_name" exception=e
-            end
-        end
-        @info "Cleanup completed for year $year"
-    finally
-        DBInterface.close!(conn)
-    end
-end
-
-"""
     step8_apply_circularity_parameters(year::Int, config::ProcessingConfig)
 
 Step 8: Apply external circularity parameters to update circularity rates and estimates.
@@ -392,7 +354,68 @@ function step8_apply_circularity_parameters(year::Int, config::ProcessingConfig)
     DBInterface.close!(conn)
 end
 
+"""
+    step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
 
+Step 9: Remove temporary tables created during processing.
+"""
+function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
+    # Check if cleanup is enabled
+    if !config.cleanup_temp_tables
+        @info "Step 9: Skipping cleanup of temporary tables (cleanup_temp_tables=false)"
+        return
+    end
+
+    #@info "Step 9: Cleaning up temporary tables for year $year in database: $(config.target_db)"
+
+    # List of temporary table suffixes
+    temp_tables = [
+        "prodcom_converted_$(year)",
+        "production_temp_$(year)",
+        "trade_temp_$(year)"
+    ]
+
+    conn = DBInterface.connect(DuckDB.DB, config.target_db)
+
+    try
+        # First, list all tables to see what exists
+        all_tables_result = DBInterface.execute(conn, "SHOW TABLES") |> DataFrame
+        #@info "Current tables in database: $(all_tables_result.name)"
+
+        for table_name in temp_tables
+            try
+                # Check if table exists before dropping
+                exists_result = DBInterface.execute(conn, "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = '$table_name'") |> DataFrame
+                table_exists = exists_result.cnt[1] > 0
+
+                if table_exists
+                    #@info "Attempting to drop temporary table: $table_name (exists=true)"
+                    DBInterface.execute(conn, "DROP TABLE IF EXISTS $table_name")
+                    #@info "Successfully dropped temporary table: $table_name"
+                else
+                    @info "Temporary table $table_name does not exist, skipping"
+                end
+            catch e
+                @error "Failed to drop table $table_name" exception = e
+                # Try to get more details about the error
+                try
+                    # Check if we can query the table
+                    test_result = DBInterface.execute(conn, "SELECT COUNT(*) FROM $table_name LIMIT 1")
+                    @warn "Table $table_name exists and is accessible but couldn't be dropped"
+                catch query_err
+                    @warn "Table $table_name may not exist or is not accessible: $query_err"
+                end
+            end
+        end
+
+        # List tables again after cleanup
+        remaining_tables = DBInterface.execute(conn, "SHOW TABLES") |> DataFrame
+        @info "Tables after cleanup: $(remaining_tables.name)"
+        #@info "Cleanup completed for year $year"
+    finally
+        DBInterface.close!(conn)
+    end
+end
 
 """
     execute_prql_to_table(source_db::String, target_db::String, prql_query::String, output_table::String)
@@ -451,10 +474,10 @@ function ensure_circularity_parameters_table(config::ProcessingConfig)
 
     # Create DataFrame with one row per product
     circularity_params_df = DataFrame(
-        product_code = product_codes,
-        current_circularity_rate = current_rates_vec,
-        potential_circularity_rate = potential_rates_vec,
-        last_updated = fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(product_codes))
+        product_code=product_codes,
+        current_circularity_rate=current_rates_vec,
+        potential_circularity_rate=potential_rates_vec,
+        last_updated=fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(product_codes))
     )
 
     # Write to database
@@ -484,9 +507,9 @@ function ensure_recovery_efficiency_table(config::ProcessingConfig, recovery_eff
     end
 
     recovery_params_df = DataFrame(
-        recovery_method = methods,
-        efficiency = efficiencies,
-        last_updated = fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(methods))
+        recovery_method=methods,
+        efficiency=efficiencies,
+        last_updated=fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(methods))
     )
 
     # Write to database
@@ -528,19 +551,19 @@ end
 
 # Export public functions
 export ProcessingConfig,
-       create_processing_config,
-       process_year_complete,
-       process_all_years,
-       ensure_processed_db_structure,
-       step0_validate_configuration,
-       step1_ensure_product_mapping,
-       step2_process_unit_conversions,
-       step3_process_production_data,
-       step4_process_trade_data,
-       step5_create_circularity_indicators,
-       step6_create_country_aggregates,
-       step7_create_product_aggregates,
-       step8_apply_circularity_parameters,
-       step9_cleanup_temp_tables
+    create_processing_config,
+    process_year_complete,
+    process_all_years,
+    ensure_processed_db_structure,
+    step0_validate_configuration,
+    step1_ensure_product_mapping,
+    step2_process_unit_conversions,
+    step3_process_production_data,
+    step4_process_trade_data,
+    step5_create_circularity_indicators,
+    step6_create_country_aggregates,
+    step7_create_product_aggregates,
+    step8_apply_circularity_parameters,
+    step9_cleanup_temp_tables
 
 end # module DataProcessor
