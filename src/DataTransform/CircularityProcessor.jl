@@ -470,6 +470,10 @@ function process_year_data(year::Int;
         # Step 3: Execute PRQL queries and process data
         @info "Step 3/3: Executing PRQL queries and processing data"
 
+        # Initialize data containers
+        production_data = DataFrame()
+        trade_data = DataFrame()
+
         # Example of how to process different data types
         for (data_type, prql_path) in prql_files
             @info "Processing $data_type data from $prql_path"
@@ -511,13 +515,7 @@ function process_year_data(year::Int;
         # Step 4: Combine and transform data
         @info "Step 4/4: Combining and inserting data into circularity table"
 
-        # Initialize DataFrames if they don't exist
-        if !@isdefined(production_data)
-            production_data = DataFrame()
-        end
-        if !@isdefined(trade_data)
-            trade_data = DataFrame()
-        end
+        # DataFrames are already initialized before the loop
 
         # Process and insert the data
         rows_inserted = combine_and_insert_data(
@@ -707,7 +705,7 @@ and inserts into the circularity table.
 - `Int`: Number of rows inserted
 """
 function combine_and_insert_data(year::Int, production_df::DataFrame, trade_df::DataFrame,
-                                mapping_df::DataFrame, db_path::String)
+    mapping_df::DataFrame, db_path::String)
     try
         @info "Combining production and trade data for year $year"
 
@@ -728,15 +726,19 @@ function combine_and_insert_data(year::Int, production_df::DataFrame, trade_df::
             println(first(production_df, min(5, nrow(production_df))))
 
             # Check for non-zero values before mapping
-            non_zero_vol_before = count(x -> !ismissing(x) && x > 0, production_df.production_volume_tonnes)
-            non_zero_val_before = count(x -> !ismissing(x) && x > 0, production_df.production_value_eur)
-            @info "DEBUG: Before mapping - Non-zero counts: volume=$non_zero_vol_before, value=$non_zero_val_before"
+            if hasproperty(production_df, :production_volume_tonnes) && hasproperty(production_df, :production_value_eur)
+                non_zero_vol_before = count(x -> !ismissing(x) && x > 0, production_df[!, :production_volume_tonnes])
+                non_zero_val_before = count(x -> !ismissing(x) && x > 0, production_df[!, :production_value_eur])
+                @info "DEBUG: Before mapping - Non-zero counts: volume=$non_zero_vol_before, value=$non_zero_val_before"
 
-            # Show some specific examples of non-zero records
-            if non_zero_vol_before > 0
-                non_zero_examples = filter(row -> !ismissing(row.production_volume_tonnes) && row.production_volume_tonnes > 0, production_df)
-                @info "DEBUG: Example non-zero volume records:"
-                println(first(non_zero_examples, min(3, nrow(non_zero_examples))))
+                # Show some specific examples of non-zero records
+                if non_zero_vol_before > 0
+                    non_zero_examples = filter(row -> !ismissing(row[:production_volume_tonnes]) && row[:production_volume_tonnes] > 0, production_df)
+                    @info "DEBUG: Example non-zero volume records:"
+                    println(first(non_zero_examples, min(3, nrow(non_zero_examples))))
+                end
+            else
+                @warn "Production columns not found in DataFrame. Available columns: $(names(production_df))"
             end
 
             # Map product codes to standardized products
@@ -798,8 +800,8 @@ function combine_and_insert_data(year::Int, production_df::DataFrame, trade_df::
                 results_df = outerjoin(
                     results_df,
                     trade_mapped,
-                    on = [:product_code, :geo, :year, :level],
-                    makeunique = true
+                    on=[:product_code, :geo, :year, :level],
+                    makeunique=true
                 )
 
                 # Handle duplicate columns from join
@@ -830,8 +832,8 @@ function combine_and_insert_data(year::Int, production_df::DataFrame, trade_df::
         if nrow(results_df) > 0
             # Initialize missing columns with appropriate default values
             for col in [:production_volume_tonnes, :production_value_eur,
-                       :import_volume_tonnes, :import_value_eur,
-                       :export_volume_tonnes, :export_value_eur]
+                :import_volume_tonnes, :import_value_eur,
+                :export_volume_tonnes, :export_value_eur]
                 if !(col in names(results_df))
                     results_df[!, col] = fill(0.0, nrow(results_df))
                 else
@@ -861,7 +863,7 @@ function combine_and_insert_data(year::Int, production_df::DataFrame, trade_df::
             results_df[!, :product_name] = coalesce.(results_df.product_name, "Unknown Product")
 
             # Filter to only include mapped products (where we have product names)
-            results_df = results_df[results_df.product_name .!= "Unknown Product", :]
+            results_df = results_df[results_df.product_name.!="Unknown Product", :]
 
             @info "Prepared $(nrow(results_df)) rows for insertion"
 

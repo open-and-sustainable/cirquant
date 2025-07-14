@@ -4,7 +4,7 @@ using DuckDB, DBInterface
 using DataFrames, CSV
 import Dates: Date, DateTime
 
-export write_duckdb_table!, write_large_duckdb_table!, executePRQL, recreate_duckdb_database, table_exists, get_table_columns
+export write_duckdb_table!, write_large_duckdb_table!, executePRQL, recreate_duckdb_database, table_exists, get_table_columns, installPRQL_DuckDBextension
 
 # --- helpers ---------------------------------------------------------------
 
@@ -83,7 +83,7 @@ function table_exists(db_path::String, table_name::String)::Bool
 
         return result.cnt[1] > 0
     catch e
-        @error "Error checking table existence" exception=e table=table_name
+        @error "Error checking table existence" exception = e table = table_name
         return false
     finally
         DBInterface.close!(con)
@@ -132,7 +132,7 @@ function get_table_columns(db_path::String, table_name::String)::Vector{String}
 
         return result.column_name
     catch e
-        @error "Error getting table columns" exception=e table=table_name
+        @error "Error getting table columns" exception = e table = table_name
         return String[]
     finally
         DBInterface.close!(con)
@@ -209,7 +209,7 @@ function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::
         @info "Creating table with SQL: $create_sql"
         DBInterface.execute(con, create_sql)
     catch e
-        @error "Failed to create table with custom types" exception=e
+        @error "Failed to create table with custom types" exception = e
 
         # Fallback: Create table with simpler VARCHAR columns for everything
         @warn "Trying simplified table creation with all VARCHAR columns"
@@ -246,7 +246,7 @@ function clean_dataframe_for_duckdb(df)
         if eltype(clean_df[!, col]) >: String
             clean_df[!, col] = [ismissing(x) ? missing :
                                 (x isa String && (x == ":C" || x == ":c" || x == ":" || x == "-" ||
-                                 x == "null" || x == "NULL" || x == "NaN" || x == "Inf" || x == "-Inf")) ? missing : x
+                                                  x == "null" || x == "NULL" || x == "NaN" || x == "Inf" || x == "-Inf")) ? missing : x
                                 for x in clean_df[!, col]]
         end
 
@@ -295,7 +295,7 @@ function create_and_load_table_throughCSV!(df, con, table)
             "COPY \"$table\" FROM '$tmp' (FORMAT CSV, HEADER TRUE, NULL 'NULL', IGNORE_ERRORS TRUE)")
         @info "Successfully loaded data into table: $table"
     catch e
-        @error "Error during CSV processing or DuckDB loading" exception=e
+        @error "Error during CSV processing or DuckDB loading" exception = e
         # Try to provide more context about the error
         if isfile(tmp)
             csv_size = filesize(tmp)
@@ -349,7 +349,7 @@ function create_and_load_table_chunked!(df, con, table, chunk_size=5000)
             chunk_success = true
             successful_chunks += 1
         catch e
-            @warn "Error processing chunk $(chunk_start)-$(chunk_end)" exception=e
+            @warn "Error processing chunk $(chunk_start)-$(chunk_end)" exception = e
             # Continue with next chunk even if this one fails
         finally
             isfile(tmp) && rm(tmp)
@@ -411,7 +411,7 @@ function create_and_load_table_direct!(df, con, table)
             end
         catch e
             # Log error but continue with next row
-            @warn "Failed to insert row $i" exception=e
+            @warn "Failed to insert row $i" exception = e
         end
     end
 
@@ -464,7 +464,7 @@ function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
 
         return (true, new_db_path)
     catch e
-        @error "Failed to create new database" exception=e
+        @error "Failed to create new database" exception = e
 
         # Try to clean up the new database if it was created but errored
         if isfile(new_db_path)
@@ -472,7 +472,7 @@ function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
                 rm(new_db_path)
                 @info "Cleaned up incomplete new database file"
             catch cleanup_err
-                @warn "Failed to clean up new database file" exception=cleanup_err
+                @warn "Failed to clean up new database file" exception = cleanup_err
             end
         end
 
@@ -514,7 +514,7 @@ function write_large_duckdb_table!(df, db, table)
             success = true
             break  # Exit the loop on success
         catch e
-            @warn "Failed to write using $method_name" exception=e
+            @warn "Failed to write using $method_name" exception = e
 
             # Check if this looks like a corrupted database error
             error_str = string(e)
@@ -534,14 +534,14 @@ function write_large_duckdb_table!(df, db, table)
                     try
                         DBInterface.close!(con)
                     catch close_err
-                        @warn "Failed to close connection" exception=close_err
+                        @warn "Failed to close connection" exception = close_err
                     end
                 end
                 if @isdefined db_conn
                     try
                         DBInterface.close!(db_conn)
                     catch close_err
-                        @warn "Failed to close database" exception=close_err
+                        @warn "Failed to close database" exception = close_err
                     end
                 end
             end
@@ -555,7 +555,7 @@ function write_large_duckdb_table!(df, db, table)
                     DBInterface.close!(db_conn)
                 end
             catch close_err
-                @warn "Failed to close connection" exception=close_err
+                @warn "Failed to close connection" exception = close_err
             end
 
             # Try dropping and recreating the table for the next attempt
@@ -569,7 +569,7 @@ function write_large_duckdb_table!(df, db, table)
                     DBInterface.close!(drop_con)
                     DBInterface.close!(drop_db)
                 catch drop_err
-                    @warn "Failed to drop table for retry" exception=drop_err
+                    @warn "Failed to drop table for retry" exception = drop_err
                 end
             end
         end
@@ -590,7 +590,7 @@ function write_large_duckdb_table!(df, db, table)
             @info "Data saved to backup file: $backup_file"
             @info "To manually import this data, you can use: COPY $(table) FROM '$(backup_file)' (FORMAT CSV, HEADER);"
         catch backup_err
-            @error "Failed to save backup file" exception=backup_err
+            @error "Failed to save backup file" exception = backup_err
         end
     end
 

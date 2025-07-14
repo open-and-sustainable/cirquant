@@ -5,9 +5,9 @@ using DuckDB, DBInterface
 
 export process_prodcom_to_tonnes
 
-# Include the unit converter
-include(joinpath(@__DIR__, "UnitConversion/UnitConverter.jl"))
-import .UnitConverter: convert_to_tonnes, is_convertible_to_tonnes
+# Include the unit converter module directly
+include("UnitConversion/UnitConverter.jl")
+using .UnitConverter: convert_to_tonnes, is_convertible_to_tonnes
 
 """
     process_prodcom_to_tonnes(db_path::String, year::Int)
@@ -58,8 +58,8 @@ function process_prodcom_to_tonnes(db_path::String, year::Int)
             unit_query = """
             SELECT value as unit
             FROM $table_name
-            WHERE prccode = '$(row.product_code)'
-                AND decl = '$(row.geo)'
+            WHERE prccode = '$(row[:product_code])'
+                AND decl = '$(row[:geo])'
                 AND indicators = 'QNTUNIT'
                 AND value IS NOT NULL
                 AND value != ''
@@ -76,12 +76,12 @@ function process_prodcom_to_tonnes(db_path::String, year::Int)
 
                 # Convert if possible
                 if is_convertible_to_tonnes(String(unit_code))
-                    tonnes_value = convert_to_tonnes(row.quantity, String(unit_code))
+                    tonnes_value = convert_to_tonnes(row[:quantity], String(unit_code))
                     if !isnan(tonnes_value) && tonnes_value > 0
                         push!(results, (
-                            product_code = row.product_code,
-                            geo = row.geo,
-                            production_tonnes = tonnes_value
+                            product_code=row[:product_code],
+                            geo=row[:geo],
+                            production_tonnes=tonnes_value
                         ))
                     end
                 end

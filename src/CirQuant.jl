@@ -11,7 +11,7 @@ const DB_PATH_TEST = "CirQuant-database/raw/test.duckdb"
 
 # External parameters for circularity calculations - loaded from config/products.toml
 # This will be initialized after module loading
-global ANALYSIS_PARAMETERS = Dict{String, Any}()
+global ANALYSIS_PARAMETERS = Dict{String,Any}()
 
 # Include and use the modules
 include("utils/DatabaseAccess.jl")
@@ -47,7 +47,7 @@ Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
               Default is "2002-2023".
 - `custom_datasets`: Optional. An array of dataset IDs to fetch.
-                   If not provided, uses ProdcomAPI.get_available_datasets() to get default datasets.
+                   If not provided, default datasets will be used.
 
 Returns:
 - Statistics about the fetching process including success/failure counts
@@ -76,30 +76,6 @@ Returns:
 function fetch_comext_data(years_str::String="2002-2023", custom_datasets=nothing)
     @info "Fetching COMEXT data for years $years_str and saving to database"
     return ComextDataFetch.fetch_comext_data(years_str, custom_datasets; db_path=DB_PATH_RAW)
-end
-
-"""
-    get_available_prodcom_datasets()
-
-Returns information about available PRODCOM datasets.
-
-Returns:
-- A DataFrame with dataset IDs and descriptions
-"""
-function get_available_prodcom_datasets()
-    return ProdcomAPI.get_available_datasets()
-end
-
-"""
-    get_available_comext_datasets()
-
-Returns information about available COMEXT datasets.
-
-Returns:
-- A DataFrame with dataset IDs and descriptions
-"""
-function get_available_comext_datasets()
-    return ComextAPI.get_available_datasets()
 end
 
 """
@@ -470,25 +446,21 @@ end
 
 # Export public API functions
 export fetch_prodcom_data,
-       fetch_prodcom_dataset,
-       fetch_comext_data,
-       fetch_comext_dataset,
-       get_available_prodcom_datasets,
-       get_available_comext_datasets,
-       fetch_combined_data,
-       convert_prodcom_to_tonnes,
-       write_product_conversion_table,
-       read_product_conversion_table,
-       get_product_mapping_data,
-       get_product_by_code,
-       create_circularity_table,
-       validate_circularity_table,
-       create_circularity_tables_range,
-       inspect_raw_tables,
-       ensure_prql_installed,
-       ANALYSIS_PARAMETERS,
-       DB_PATH_TEST,
-       process_raw_to_processed,
-       process_single_year
+    fetch_comext_data,
+    fetch_combined_data,
+    convert_prodcom_to_tonnes,
+    write_product_conversion_table,
+    read_product_conversion_table,
+    get_product_mapping_data,
+    get_product_by_code,
+    create_circularity_table,
+    validate_circularity_table,
+    create_circularity_tables_range,
+    inspect_raw_tables,
+    ensure_prql_installed,
+    ANALYSIS_PARAMETERS,
+    DB_PATH_TEST,
+    process_raw_to_processed,
+    process_single_year
 
 end # module CirQuant

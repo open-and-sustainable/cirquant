@@ -35,6 +35,7 @@ struct ProcessingConfig
     use_test_mode::Bool
     analysis_params::Dict{String, Any}
     prql_timeout::Int  # Timeout for PRQL queries in seconds
+    cleanup_temp_tables::Bool  # Whether to remove temporary tables after processing
 end
 
 """
@@ -50,6 +51,7 @@ Create a processing configuration with sensible defaults.
 - `use_test_mode`: Use test database with only 2002 data (default: false)
 - `analysis_params`: Analysis parameters for circularity calculations
 - `prql_timeout`: Timeout for PRQL queries in seconds (default: 300)
+- `cleanup_temp_tables`: Whether to remove temporary tables after processing (default: true)
 """
 function create_processing_config(;
     source_db::String = "",
@@ -58,7 +60,8 @@ function create_processing_config(;
     end_year::Int = 2023,
     use_test_mode::Bool = false,
     analysis_params::Dict{String, Any} = Dict{String, Any}(),
-    prql_timeout::Int = 300
+    prql_timeout::Int = 300,
+    cleanup_temp_tables::Bool = true
 )
     # Determine database paths
     if isempty(source_db)
@@ -85,7 +88,8 @@ function create_processing_config(;
         (start_year, end_year),
         use_test_mode,
         analysis_params,
-        prql_timeout
+        prql_timeout,
+        cleanup_temp_tables
     )
 end
 
@@ -148,6 +152,9 @@ function process_year_complete(year::Int, config::ProcessingConfig)
 
     # Step 8: Apply circularity parameters
     step8_apply_circularity_parameters(year, config)
+
+    # Step 9: Clean up temporary tables
+    step9_cleanup_temp_tables(year, config)
 end
 
 """
@@ -308,6 +315,44 @@ function step7_create_product_aggregates(year::Int, config::ProcessingConfig)
         prql_query,
         table_name
     )
+end
+
+"""
+    step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
+
+Step 9: Remove temporary tables created during processing.
+"""
+function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
+    # Check if cleanup is enabled
+    if !config.cleanup_temp_tables
+        @info "Step 9: Skipping cleanup of temporary tables (cleanup_temp_tables=false)"
+        return
+    end
+
+    @info "Step 9: Cleaning up temporary tables for year $year..."
+
+    # List of temporary table suffixes
+    temp_tables = [
+        "prodcom_converted_$(year)",
+        "production_temp_$(year)",
+        "trade_temp_$(year)"
+    ]
+
+    conn = DBInterface.connect(DuckDB.DB, config.target_db)
+
+    try
+        for table_name in temp_tables
+            try
+                DBInterface.execute(conn, "DROP TABLE IF EXISTS $table_name")
+                @info "Dropped temporary table: $table_name"
+            catch e
+                @warn "Failed to drop table $table_name" exception=e
+            end
+        end
+        @info "Cleanup completed for year $year"
+    finally
+        DBInterface.close!(conn)
+    end
 end
 
 """
@@ -495,6 +540,7 @@ export ProcessingConfig,
        step5_create_circularity_indicators,
        step6_create_country_aggregates,
        step7_create_product_aggregates,
-       step8_apply_circularity_parameters
+       step8_apply_circularity_parameters,
+       step9_cleanup_temp_tables
 
 end # module DataProcessor
