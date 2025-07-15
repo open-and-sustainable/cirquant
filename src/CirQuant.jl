@@ -21,6 +21,7 @@ include("DataFetch/ComextDataFetch.jl")
 include("DataTransform/CircularityProcessor.jl")
 include("DataTransform/UnitConversion/UnitConverter.jl")
 include("DataTransform/ProdcomUnitConverter.jl")
+include("DataTransform/CountryCodeMapper.jl")
 include("DataTransform/DataProcessor.jl")
 
 using .DatabaseAccess
@@ -28,6 +29,7 @@ using .AnalysisConfigLoader
 using .ProdcomDataFetch
 using .ComextDataFetch
 using .CircularityProcessor
+using .CountryCodeMapper
 using .ProdcomUnitConverter
 using .DataProcessor
 

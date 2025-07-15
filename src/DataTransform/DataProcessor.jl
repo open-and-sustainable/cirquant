@@ -7,6 +7,7 @@ using Dates: now, format
 using ..DatabaseAccess
 using ..AnalysisConfigLoader
 using ..CircularityProcessor
+using ..CountryCodeMapper
 
 """
 Main data processing orchestrator module that transforms raw data into processed analysis-ready tables.
@@ -178,6 +179,10 @@ function step1_ensure_product_mapping(config::ProcessingConfig)
     if !has_product_mapping_table(config.target_db)
         write_product_conversion_table(config.target_db)
     end
+
+    # Ensure country code mapping table exists
+    @info "Creating country code mapping table..."
+    CountryCodeMapper.create_country_mapping_table(config.target_db)
 
     # Ensure parameter tables exist
     ensure_circularity_parameters_table(config)
