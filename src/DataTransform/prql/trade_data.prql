@@ -13,7 +13,7 @@ derive {
     # Ensure product code is clean (HS code)
     product_code_clean = s"TRIM(product)",
     # Map time column to year
-    year = s"time",
+    year = s"TRY_CAST(time AS INTEGER)",
     # Identify flow type (flow column contains numeric codes)
     is_import = s"CASE WHEN flow = '1' THEN 1 ELSE 0 END",
     is_export = s"CASE WHEN flow = '2' THEN 1 ELSE 0 END"
@@ -33,10 +33,11 @@ select {
     import_volume_tonnes,
     import_value_eur,
     export_volume_tonnes,
-    export_value_eur
+    export_value_eur,
+    data_source = s"'COMEXT'"
 }
 # Group by dimensions to aggregate flows
-group {product_code, year, geo, level} (
+group {product_code, year, geo, level, data_source} (
     aggregate {
         import_volume_tonnes = sum import_volume_tonnes,
         import_value_eur = sum import_value_eur,

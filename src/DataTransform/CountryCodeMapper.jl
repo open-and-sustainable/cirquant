@@ -2,6 +2,7 @@ module CountryCodeMapper
 
 using DataFrames
 using DuckDB, DBInterface
+using ..DatabaseAccess
 
 export get_country_code_mapping, harmonize_country_code, create_country_mapping_table, PRODCOM_TO_ISO_MAP, ISO_TO_PRODCOM_MAP
 
@@ -212,6 +213,45 @@ function create_country_mapping_table(db_path::String; table_name::String = "cou
         @info "Created country code mapping table '$table_name' with $(nrow(mapping_df)) entries"
     finally
         DBInterface.close!(conn)
+    end
+end
+
+"""
+    create_country_mapping_table_with_connection(conn::DuckDB.Connection; table_name::String = "country_code_mapping")
+
+Create country code mapping table using an existing database connection.
+This avoids opening multiple connections which can cause corruption.
+
+# Arguments
+- `conn`: Existing DuckDB connection
+- `table_name`: Name of the table to create (default: "country_code_mapping")
+
+# Returns
+- Number of entries created
+
+# Example
+```julia
+db = DuckDB.DB("mydb.duckdb")
+conn = DBInterface.connect(db)
+create_country_mapping_table_with_connection(conn)
+```
+"""
+function create_country_mapping_table_with_connection(conn::DuckDB.Connection; table_name::String = "country_code_mapping")
+    # Get mapping as DataFrame
+    mapping_df = get_country_code_mapping()
+
+    try
+        # Create table
+        DBInterface.execute(conn, "DROP TABLE IF EXISTS $table_name")
+
+        # Write using DatabaseAccess utility with existing connection
+        DatabaseAccess.write_duckdb_table_with_connection!(mapping_df, conn, table_name)
+
+        @info "Created country code mapping table '$table_name' with $(nrow(mapping_df)) entries"
+        return nrow(mapping_df)
+    catch e
+        @error "Failed to create country code mapping table" exception = e
+        rethrow(e)
     end
 end
 

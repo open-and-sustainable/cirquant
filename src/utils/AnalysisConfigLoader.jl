@@ -384,6 +384,38 @@ function write_product_conversion_table(db_path::String; table_name::String = "p
 end
 
 """
+    write_product_conversion_table_with_connection(conn::DuckDB.Connection; table_name::String = "product_mapping_codes", config_path::String = PRODUCTS_CONFIG_PATH)
+
+Write product conversion table using an existing database connection.
+This avoids opening multiple connections which can cause corruption.
+
+# Arguments
+- `conn`: Existing DuckDB connection
+- `table_name`: Name of the table to create (default: "product_mapping_codes")
+- `config_path`: Path to the products configuration file
+
+# Returns
+- `true` if successful, `false` otherwise
+"""
+function write_product_conversion_table_with_connection(conn; table_name::String = "product_mapping_codes", config_path::String = PRODUCTS_CONFIG_PATH)
+    try
+        @info "Writing product conversion table using existing connection"
+
+        # Load mapping data from TOML
+        mapping_df = load_product_mappings(config_path)
+
+        # Use DatabaseAccess utility with existing connection
+        DatabaseAccess.write_duckdb_table_with_connection!(mapping_df, conn, table_name)
+
+        @info "Successfully created/updated table '$table_name' with $(nrow(mapping_df)) product mappings"
+        return true
+    catch e
+        @error "Failed to write product conversion table" exception=e
+        return false
+    end
+end
+
+"""
     read_product_conversion_table(db_path::String; table_name::String = "product_mapping_codes")
 
 Read the product conversion table from a DuckDB database.
@@ -460,6 +492,6 @@ function get_product_by_code(db_path::String, code::String, code_type::Symbol = 
 end
 
 # Export additional functions that replicate ProductConversionTables functionality
-export write_product_conversion_table, read_product_conversion_table, get_product_by_code
+export write_product_conversion_table, write_product_conversion_table_with_connection, read_product_conversion_table, get_product_by_code
 
 end # module AnalysisConfigLoader

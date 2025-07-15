@@ -21,20 +21,16 @@ group {geo, year} (
         total_exports_tonnes = sum export_volume_tonnes,
         total_exports_value_eur = sum export_value_eur,
 
-        # Apparent consumption aggregate
-        total_apparent_consumption_tonnes = sum apparent_consumption_tonnes,
-        total_apparent_consumption_value_eur = sum apparent_consumption_value_eur,
-
-        # Count of products for this country
+        # Count of products
         product_count = count_distinct product_code,
 
-        # Count of products with production data
+        # Count products with production data
         products_with_production = count_distinct (case [
             production_volume_tonnes > 0 => product_code,
             true => null
         ]),
 
-        # Count of products with trade data
+        # Count products with trade data
         products_with_trade = count_distinct (case [
             (import_volume_tonnes > 0 || export_volume_tonnes > 0) => product_code,
             true => null
@@ -42,13 +38,17 @@ group {geo, year} (
     }
 )
 
-# Calculate derived country-level indicators
+# Calculate derived indicators
 derive {
+    # Apparent consumption
+    total_apparent_consumption_tonnes = total_production_tonnes + total_imports_tonnes - total_exports_tonnes,
+    total_apparent_consumption_value_eur = total_production_value_eur + total_imports_value_eur - total_exports_value_eur,
+
     # Trade balance
     trade_balance_tonnes = total_exports_tonnes - total_imports_tonnes,
     trade_balance_value_eur = total_exports_value_eur - total_imports_value_eur,
 
-    # Trade coverage ratio (exports/imports)
+    # Trade coverage ratio
     trade_coverage_ratio = s"""
         CASE
             WHEN total_imports_value_eur > 0
@@ -57,7 +57,7 @@ derive {
         END
     """,
 
-    # Overall import dependency
+    # Import dependency
     overall_import_dependency = s"""
         CASE
             WHEN (total_production_tonnes + total_imports_tonnes) > 0
@@ -66,7 +66,7 @@ derive {
         END
     """,
 
-    # Overall export intensity
+    # Export intensity
     overall_export_intensity = s"""
         CASE
             WHEN total_production_tonnes > 0
@@ -75,7 +75,7 @@ derive {
         END
     """,
 
-    # Trade openness index
+    # Trade openness
     trade_openness_index = s"""
         CASE
             WHEN (total_production_tonnes + total_imports_tonnes + total_exports_tonnes) > 0
@@ -85,7 +85,7 @@ derive {
         END
     """,
 
-    # Average unit values across all products
+    # Average unit values
     avg_production_unit_value_country = s"""
         CASE
             WHEN total_production_tonnes > 0
@@ -110,7 +110,7 @@ derive {
         END
     """,
 
-    # Data coverage indicator (% of products with data)
+    # Data coverage
     production_coverage = s"""
         CASE
             WHEN product_count > 0
@@ -125,11 +125,9 @@ derive {
             THEN CAST(products_with_trade AS DOUBLE) / CAST(product_count AS DOUBLE)
             ELSE 0
         END
-    """
-}
+    """,
 
-# Add country classification based on trade patterns
-derive {
+    # Country trade profile
     country_trade_profile = s"""
         CASE
             WHEN trade_balance_value_eur > 0 AND overall_export_intensity > 0.5
@@ -144,7 +142,7 @@ derive {
         END
     """,
 
-    # Economic complexity indicator (based on diversity and value)
+    # Economic complexity
     economic_complexity_indicator = s"""
         products_with_production * avg_production_unit_value_country / 1000000
     """

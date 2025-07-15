@@ -13,7 +13,7 @@ derive {
     # Ensure product code is clean
     product_code_clean = s"TRIM(prccode)",
     # Map time column to year
-    year = s"time",
+    year = s"TRY_CAST(time AS INTEGER)",
     # Derive level based on geo
     level = s"CASE WHEN decl = 'EU27' THEN 'EU' ELSE 'country' END"
 }

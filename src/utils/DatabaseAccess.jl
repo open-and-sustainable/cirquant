@@ -4,7 +4,7 @@ using DuckDB, DBInterface
 using DataFrames, CSV
 import Dates: Date, DateTime
 
-export write_duckdb_table!, write_large_duckdb_table!, executePRQL, recreate_duckdb_database, table_exists, get_table_columns, installPRQL_DuckDBextension
+export write_duckdb_table!, write_duckdb_table_with_connection!, write_large_duckdb_table!, executePRQL, recreate_duckdb_database, table_exists, get_table_columns, installPRQL_DuckDBextension
 
 # --- helpers ---------------------------------------------------------------
 
@@ -424,6 +424,29 @@ con = DBInterface.connect(db_conn);
 create_and_load_table_directly!(df, con, table);
 DBInterface.close!(con);
 DBInterface.close!(db_conn))
+
+"""
+    write_duckdb_table_with_connection!(df, con::DuckDB.Connection, table)
+
+Write a DataFrame to a DuckDB table using an existing connection.
+This avoids opening/closing connections repeatedly which can cause corruption.
+
+# Arguments
+- `df`: DataFrame to write
+- `con`: Existing DuckDB connection
+- `table`: Name of the table to create/replace
+
+# Example
+```julia
+db = DuckDB.DB("mydb.duckdb")
+con = DBInterface.connect(db)
+write_duckdb_table_with_connection!(df, con, "my_table")
+# Note: caller is responsible for closing the connection
+```
+"""
+function write_duckdb_table_with_connection!(df, con::DuckDB.Connection, table)
+    create_and_load_table_directly!(df, con, table)
+end
 
 """
     recreate_duckdb_database(db_path, backup_suffix="_corrupted")
