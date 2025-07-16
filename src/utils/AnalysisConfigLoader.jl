@@ -345,7 +345,7 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
     end
 
     if is_valid && isempty(errors)
-        @info "Configuration validation passed successfully for $(length(products)) products"
+        #@info "Configuration validation passed successfully for $(length(products)) products"
     end
 
     return is_valid

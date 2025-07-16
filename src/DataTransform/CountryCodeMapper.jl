@@ -210,7 +210,7 @@ function create_country_mapping_table(db_path::String; table_name::String = "cou
             DBInterface.execute(conn, insert_query)
         end
 
-        @info "Created country code mapping table '$table_name' with $(nrow(mapping_df)) entries"
+        #@info "Created country code mapping table '$table_name' with $(nrow(mapping_df)) entries"
     finally
         DBInterface.close!(conn)
     end
@@ -247,7 +247,7 @@ function create_country_mapping_table_with_connection(conn::DuckDB.Connection; t
         # Write using DatabaseAccess utility with existing connection
         DatabaseAccess.write_duckdb_table_with_connection!(mapping_df, conn, table_name)
 
-        @info "Created country code mapping table '$table_name' with $(nrow(mapping_df)) entries"
+        #@info "Created country code mapping table '$table_name' with $(nrow(mapping_df)) entries"
         return nrow(mapping_df)
     catch e
         @error "Failed to create country code mapping table" exception = e

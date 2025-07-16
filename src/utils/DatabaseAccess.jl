@@ -206,7 +206,7 @@ function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::
         sql_columns = join(cols, ", ")
         create_sql = "CREATE TABLE \"$table\" ($sql_columns)"
 
-        @info "Creating table with SQL: $create_sql"
+        #@info "Creating table with SQL: $create_sql"
         DBInterface.execute(con, create_sql)
     catch e
         @error "Failed to create table with custom types" exception = e
@@ -218,7 +218,7 @@ function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::
         simple_cols = ["\"$n\" VARCHAR" for n in names(df)]
         simple_sql = "CREATE TABLE \"$table\" ($(join(simple_cols, ", ")))"
 
-        @info "Creating table with simplified SQL: $simple_sql"
+        #@info "Creating table with simplified SQL: $simple_sql"
         DBInterface.execute(con, simple_sql)
     end
 end

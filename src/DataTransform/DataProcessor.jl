@@ -146,29 +146,25 @@ function process_year_complete(year::Int, config::ProcessingConfig)
         step3_process_production_data(year, config, target_conn)
 
         # Step 4: Extract and transform trade data
+        # # Step 4b: Harmonize production and trade data using mappings
+        # # Step 4c: Fill in PRODCOM trade data where COMEXT is zero
         step4_process_trade_data(year, config, target_conn)
-
-        # Step 4b: Harmonize production and trade data using mappings
-        step4b_harmonize_production_trade_data(year, config, target_conn)
-
-        # Step 4c: Fill in PRODCOM trade data where COMEXT is zero
-        step4c_fill_prodcom_trade_fallback(year, config, target_conn)
 
         # Step 5: Create main circularity indicators table
         step5_create_circularity_indicators(year, config, target_conn)
 
         # Step 6: Calculate country aggregates
-        #step6_create_country_aggregates(year, config)
+        step6_create_country_aggregates(year, config, target_conn)
 
         # Step 7: Calculate product aggregates
-        #step7_create_product_aggregates(year, config)
+        step7_create_product_aggregates(year, config, target_conn)
 
         # Step 8: Apply circularity parameters
         # COMMENTED OUT - focusing on product/geo matching first
-        # step8_apply_circularity_parameters(year, config)
+        step8_apply_circularity_parameters(year, config, target_conn)
 
         # Step 9: Clean up temporary tables
-        #step9_cleanup_temp_tables(year, config)
+        step9_cleanup_temp_tables(year, config, target_conn)
 
         # Close the connection properly
         DBInterface.close!(target_conn)
@@ -202,13 +198,14 @@ end
 Step 1: Ensure product mapping and parameter tables exist.
 """
 function step1_ensure_product_mapping(config::ProcessingConfig, conn::DuckDB.Connection)
+    @info "Step 1: Ensuring mapping tables exist..."
     # Ensure product mapping table exists
     if !has_product_mapping_table(config.target_db)
         write_product_conversion_table_with_connection(conn)
     end
 
     # Ensure country code mapping table exists
-    @info "Creating country code mapping table..."
+    #@info "Creating country code mapping table..."
     CountryCodeMapper.create_country_mapping_table_with_connection(conn)
 
     # Ensure parameter tables exist
@@ -221,6 +218,7 @@ end
 Step 2: Process unit conversions for PRODCOM data using PRQL query.
 """
 function step2_process_unit_conversions(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
+    @info "Step 2: Converting units for quantities and volumes..."
     prql_path = joinpath(PRQL_DIR, "unit_conversion.prql")
     table_name = "prodcom_converted_$(year)"
 
@@ -243,6 +241,7 @@ end
 Step 3: Process production data using PRQL query.
 """
 function step3_process_production_data(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
+    @info "Step 3: Processing production values and volumes..."
     prql_path = joinpath(PRQL_DIR, "production_data.prql")
     table_name = "production_temp_$(year)"
 
@@ -265,6 +264,7 @@ end
 Step 4: Process trade data using PRQL query.
 """
 function step4_process_trade_data(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
+    @info "Step 4: Processing trade values and volumes..."
     prql_path = joinpath(PRQL_DIR, "trade_data.prql")
     table_name = "trade_temp_$(year)"
 
@@ -279,113 +279,18 @@ function step4_process_trade_data(year::Int, config::ProcessingConfig, conn::Duc
         prql_query,
         table_name
     )
+    step4b_harmonize_production_trade_data(year, config, conn)
+    step4c_fill_prodcom_trade_fallback(year, config, conn)
 end
 
 """
-    step4b_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig)
-
-Fill in PRODCOM trade data where COMEXT has zero values.
-This provides a fallback for products/countries not covered by COMEXT.
-"""
-function step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
-    @info "Creating production_trade_$year table with PRODCOM fallback data..."
-
-    final_table = "production_trade_$year"
-    harmonized_table = "production_trade_harmonized_$year"
-
-    try
-        # Load harmonized data
-        harmonized_df = DataFrame(DBInterface.execute(target_conn, "SELECT * FROM $harmonized_table"))
-
-        # Get PRODCOM trade data from trade_temp table (already in processed database)
-        prodcom_sql = """
-            SELECT
-                product_code,
-                geo,
-                import_volume_tonnes,
-                import_value_eur,
-                export_volume_tonnes,
-                export_value_eur
-            FROM trade_temp_$year
-            WHERE data_source = 'PRODCOM'
-                AND (import_volume_tonnes > 0 OR import_value_eur > 0
-                     OR export_volume_tonnes > 0 OR export_value_eur > 0)
-        """
-
-        prodcom_df = DataFrame(DBInterface.execute(target_conn, prodcom_sql))
-
-        if nrow(prodcom_df) > 0
-            # Apply fallback values to harmonized data
-            for row in eachrow(harmonized_df)
-                # Find matching PRODCOM data
-                prodcom_match = filter(r -> r.product_code == row.product_code &&
-                                           r.geo == row.geo, prodcom_df)
-
-                if nrow(prodcom_match) > 0
-                    p = prodcom_match[1, :]
-                    # Replace zeros with PRODCOM values
-                    if row.import_volume_tonnes == 0 && p.import_volume_tonnes > 0
-                        row.import_volume_tonnes = p.import_volume_tonnes
-                    end
-                    if row.import_value_eur == 0 && p.import_value_eur > 0
-                        row.import_value_eur = p.import_value_eur
-                    end
-                    if row.export_volume_tonnes == 0 && p.export_volume_tonnes > 0
-                        row.export_volume_tonnes = p.export_volume_tonnes
-                    end
-                    if row.export_value_eur == 0 && p.export_value_eur > 0
-                        row.export_value_eur = p.export_value_eur
-                    end
-                end
-            end
-
-            @info "Applied PRODCOM fallback data to $(nrow(prodcom_match)) records"
-        end
-
-        # Write final table
-        DBInterface.execute(target_conn, "DROP TABLE IF EXISTS $final_table")
-        DatabaseAccess.write_duckdb_table_with_connection!(harmonized_df, target_conn, final_table)
-
-        @info "Created $final_table with $(nrow(harmonized_df)) records"
-
-    catch e
-        @error "Failed to create production_trade table" exception=e
-        rethrow(e)
-    end
-end
-
-"""
-    step5_create_circularity_indicators(year::Int, config::ProcessingConfig)
-
-Step 5: Create the main circularity indicators table by combining production and trade data.
-"""
-function step5_create_circularity_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
-    prql_path = joinpath(PRQL_DIR, "circularity_indicators.prql")
-    table_name = "$(CIRCULARITY_TABLE_PREFIX)$(year)"
-
-    # Read PRQL query template
-    prql_query = read(prql_path, String)
-
-    # Replace year placeholder only
-    prql_query = replace(prql_query, "{{YEAR}}" => string(year))
-
-    # Execute PRQL query
-    execute_prql_to_table(
-        config.target_db,
-        target_conn,
-        prql_query,
-        table_name
-    )
-end
-
-"""
-    harmonize_production_trade_data(year::Int, config::ProcessingConfig)
+    step4b_harmonize_production_trade_data(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Harmonize production and trade data using country and product mappings.
 This function merges production_temp and trade_temp tables using the mapping tables.
 """
 function step4b_harmonize_production_trade_data(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
-    @info "Harmonizing production and trade data for year $year..."
+    #@info "Harmonizing production and trade data for year $year..."
 
     # Load mapping tables from processed database using existing connection
     # Declare variables outside try block
@@ -567,7 +472,7 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
         # Create new table with harmonized data using existing connection
         DatabaseAccess.write_duckdb_table_with_connection!(merged_data, target_conn, table_name)
 
-        @info "Created harmonized table '$table_name' with $(nrow(merged_data)) records"
+        #@info "Created harmonized table '$table_name' with $(nrow(merged_data)) records"
 
     catch e
         @error "Failed to write harmonized data" exception=e
@@ -578,11 +483,110 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
 end
 
 """
-    step6_create_country_aggregates(year::Int, config::ProcessingConfig)
+    step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+
+Fill in PRODCOM trade data where COMEXT has zero values.
+This provides a fallback for products/countries not covered by COMEXT.
+"""
+function step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    #@info "Creating production_trade_$year table with PRODCOM fallback data..."
+
+    final_table = "production_trade_$year"
+    harmonized_table = "production_trade_harmonized_$year"
+
+    try
+        # Load harmonized data
+        harmonized_df = DataFrame(DBInterface.execute(target_conn, "SELECT * FROM $harmonized_table"))
+
+        # Get PRODCOM trade data from trade_temp table (already in processed database)
+        prodcom_sql = """
+            SELECT
+                product_code,
+                geo,
+                import_volume_tonnes,
+                import_value_eur,
+                export_volume_tonnes,
+                export_value_eur
+            FROM trade_temp_$year
+            WHERE data_source = 'PRODCOM'
+                AND (import_volume_tonnes > 0 OR import_value_eur > 0
+                     OR export_volume_tonnes > 0 OR export_value_eur > 0)
+        """
+
+        prodcom_df = DataFrame(DBInterface.execute(target_conn, prodcom_sql))
+
+        if nrow(prodcom_df) > 0
+            # Apply fallback values to harmonized data
+            for row in eachrow(harmonized_df)
+                # Find matching PRODCOM data
+                prodcom_match = filter(r -> r.product_code == row.product_code &&
+                                           r.geo == row.geo, prodcom_df)
+
+                if nrow(prodcom_match) > 0
+                    p = prodcom_match[1, :]
+                    # Replace zeros with PRODCOM values
+                    if row.import_volume_tonnes == 0 && p.import_volume_tonnes > 0
+                        row.import_volume_tonnes = p.import_volume_tonnes
+                    end
+                    if row.import_value_eur == 0 && p.import_value_eur > 0
+                        row.import_value_eur = p.import_value_eur
+                    end
+                    if row.export_volume_tonnes == 0 && p.export_volume_tonnes > 0
+                        row.export_volume_tonnes = p.export_volume_tonnes
+                    end
+                    if row.export_value_eur == 0 && p.export_value_eur > 0
+                        row.export_value_eur = p.export_value_eur
+                    end
+                end
+            end
+
+            #@info "Applied PRODCOM fallback data to $(nrow(prodcom_match)) records"
+        end
+
+        # Write final table
+        DBInterface.execute(target_conn, "DROP TABLE IF EXISTS $final_table")
+        DatabaseAccess.write_duckdb_table_with_connection!(harmonized_df, target_conn, final_table)
+
+        #@info "Created $final_table with $(nrow(harmonized_df)) records"
+
+    catch e
+        @error "Failed to create production_trade table" exception=e
+        rethrow(e)
+    end
+end
+
+"""
+    step5_create_circularity_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+
+Step 5: Create the main circularity indicators table by combining production and trade data.
+"""
+function step5_create_circularity_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 5: Computing circularity indicators..."
+    prql_path = joinpath(PRQL_DIR, "circularity_indicators.prql")
+    table_name = "$(CIRCULARITY_TABLE_PREFIX)$(year)"
+
+    # Read PRQL query template
+    prql_query = read(prql_path, String)
+
+    # Replace year placeholder only
+    prql_query = replace(prql_query, "{{YEAR}}" => string(year))
+
+    # Execute PRQL query
+    execute_prql_to_table(
+        config.target_db,
+        target_conn,
+        prql_query,
+        table_name
+    )
+end
+
+"""
+    step6_create_country_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 6: Create country-level aggregates table.
 """
-function step6_create_country_aggregates(year::Int, config::ProcessingConfig)
+function step6_create_country_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 6: Aggregating data by country..."
     prql_path = joinpath(PRQL_DIR, "country_aggregates.prql")
     table_name = "$(COUNTRY_AGGREGATES_PREFIX)$(year)"
 
@@ -593,18 +597,19 @@ function step6_create_country_aggregates(year::Int, config::ProcessingConfig)
     # Execute PRQL query
     execute_prql_to_table(
         config.target_db,
-        config.target_db,
+        target_conn,
         prql_query,
         table_name
     )
 end
 
 """
-    step7_create_product_aggregates(year::Int, config::ProcessingConfig)
+    step7_create_product_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 7: Create product-level EU aggregates table.
 """
-function step7_create_product_aggregates(year::Int, config::ProcessingConfig)
+function step7_create_product_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 7: Aggregating data by product..."
     prql_path = joinpath(PRQL_DIR, "product_aggregates.prql")
     table_name = "$(PRODUCT_AGGREGATES_PREFIX)$(year)"
 
@@ -615,14 +620,14 @@ function step7_create_product_aggregates(year::Int, config::ProcessingConfig)
     # Execute PRQL query
     execute_prql_to_table(
         config.target_db,
-        config.target_db,
+        target_conn,
         prql_query,
         table_name
     )
 end
 
 """
-    step8_apply_circularity_parameters(year::Int, config::ProcessingConfig)
+    step8_apply_circularity_parameters(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 8: Apply external circularity parameters to update circularity rates and estimates.
 
@@ -632,7 +637,8 @@ TODO: Implement logic to:
 3. Calculate monetary savings based on material savings and unit values
 4. Update the circularity indicators table
 """
-function step8_apply_circularity_parameters(year::Int, config::ProcessingConfig)
+function step8_apply_circularity_parameters(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 8: Applying circulariy parameters..."
     prql_path = joinpath(PRQL_DIR, "update_circularity_parameters.prql")
     table_name = "$(CIRCULARITY_TABLE_PREFIX)$(year)"
     temp_table = "$(table_name)_updated"
@@ -646,24 +652,25 @@ function step8_apply_circularity_parameters(year::Int, config::ProcessingConfig)
     # Execute PRQL query to create updated table
     execute_prql_to_table(
         config.target_db,
-        config.target_db,
+        target_conn,
         prql_query,
         temp_table
     )
 
     # Replace original table with updated one
-    conn = DBInterface.connect(DuckDB.DB, config.target_db)
-    DBInterface.execute(conn, "DROP TABLE IF EXISTS $table_name")
-    DBInterface.execute(conn, "ALTER TABLE $temp_table RENAME TO $table_name")
-    DBInterface.close!(conn)
+    #conn = DBInterface.connect(DuckDB.DB, config.target_db)
+    DBInterface.execute(target_conn, "DROP TABLE IF EXISTS $table_name")
+    DBInterface.execute(target_conn, "ALTER TABLE $temp_table RENAME TO $table_name")
+    #DBInterface.close!(conn)
 end
 
 """
-    step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
+    step9_cleanup_temp_tables(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 9: Remove temporary tables created during processing.
 """
-function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
+function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 9: Cleaning up temporary tables..."
     # Check if cleanup is enabled
     if !config.cleanup_temp_tables
         @info "Step 9: Skipping cleanup of temporary tables (cleanup_temp_tables=false)"
@@ -680,22 +687,22 @@ function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
         "production_trade_harmonized_$(year)"
     ]
 
-    conn = DBInterface.connect(DuckDB.DB, config.target_db)
+    #conn = DBInterface.connect(DuckDB.DB, config.target_db)
 
     try
         # First, list all tables to see what exists
-        all_tables_result = DBInterface.execute(conn, "SHOW TABLES") |> DataFrame
+        all_tables_result = DBInterface.execute(target_conn, "SHOW TABLES") |> DataFrame
         #@info "Current tables in database: $(all_tables_result.name)"
 
         for table_name in temp_tables
             try
                 # Check if table exists before dropping
-                exists_result = DBInterface.execute(conn, "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = '$table_name'") |> DataFrame
+                exists_result = DBInterface.execute(target_conn, "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = '$table_name'") |> DataFrame
                 table_exists = exists_result.cnt[1] > 0
 
                 if table_exists
                     #@info "Attempting to drop temporary table: $table_name (exists=true)"
-                    DBInterface.execute(conn, "DROP TABLE IF EXISTS $table_name")
+                    DBInterface.execute(target_conn, "DROP TABLE IF EXISTS $table_name")
                     #@info "Successfully dropped temporary table: $table_name"
                 else
                     @info "Temporary table $table_name does not exist, skipping"
@@ -705,7 +712,7 @@ function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
                 # Try to get more details about the error
                 try
                     # Check if we can query the table
-                    test_result = DBInterface.execute(conn, "SELECT COUNT(*) FROM $table_name LIMIT 1")
+                    test_result = DBInterface.execute(target_conn, "SELECT COUNT(*) FROM $table_name LIMIT 1")
                     @warn "Table $table_name exists and is accessible but couldn't be dropped"
                 catch query_err
                     @warn "Table $table_name may not exist or is not accessible: $query_err"
@@ -714,11 +721,11 @@ function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig)
         end
 
         # List tables again after cleanup
-        remaining_tables = DBInterface.execute(conn, "SHOW TABLES") |> DataFrame
+        remaining_tables = DBInterface.execute(target_conn, "SHOW TABLES") |> DataFrame
         @info "Tables after cleanup: $(remaining_tables.name)"
         #@info "Cleanup completed for year $year"
-    finally
-        DBInterface.close!(conn)
+    catch e
+        @error "Failed to get table list" exception = e
     end
 end
 
@@ -787,7 +794,7 @@ function ensure_circularity_parameters_table_with_connection(config::ProcessingC
 
     # Write to database
     DatabaseAccess.write_duckdb_table_with_connection!(circularity_params_df, conn, "parameters_circularity_rate")
-    @info "Created/updated circularity parameters table with $(length(product_codes)) product-specific rates"
+    #@info "Created/updated circularity parameters table with $(length(product_codes)) product-specific rates"
 
     # If there are recovery efficiency parameters, create a separate table
     recovery_efficiency = get(config.analysis_params, "recovery_efficiency", Dict())
@@ -819,7 +826,7 @@ function ensure_recovery_efficiency_table(config::ProcessingConfig, recovery_eff
 
     # Write to database
     DatabaseAccess.write_duckdb_table!(recovery_params_df, config.target_db, "parameters_recovery_efficiency")
-    @info "Created/updated recovery efficiency parameters table with $(length(methods)) methods"
+    #@info "Created/updated recovery efficiency parameters table with $(length(methods)) methods"
 end
 
 """
