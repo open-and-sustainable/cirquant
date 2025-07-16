@@ -21,8 +21,8 @@ echo "Output will be saved to CirQuant-database/processed/CirQuant_2002-2023.duc
 echo
 
 # Run the Julia script
-#julia -e 'using Pkg; Pkg.activate("."); include("src/CirQuant.jl"); using .CirQuant; result = process_single_year(2002, use_test_mode=true)'
-julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee process.log
+#julia -e 'using Pkg; Pkg.activate("."); include("src/CirQuant.jl"); using .CirQuant; process_data("2002", use_test_mode=true)'
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.process_data(\"$YEARS\")" 2>&1 | tee process.log
 
 echo
 echo "Process completed. Log saved to process.log"

@@ -146,92 +146,89 @@ function validate_product_config(config_path::String = joinpath(@__DIR__, "..", 
 end
 
 """
-    process_raw_to_processed(; kwargs...)
+    process_data(years_str::String="2002-2023"; kwargs...)
 
-Main function to process raw data into the processed database format.
-This orchestrates the complete transformation pipeline.
+Process raw data into the processed database format for the specified year(s).
+This function follows the same pattern as fetch_data functions, accepting either
+a single year or a range of years.
+
+# Arguments
+- `years_str`: String specifying the year(s) to process. Can be:
+  - Single year: "2022"
+  - Year range: "2020-2023"
+  Default is "2002-2023".
 
 # Keywords
 - `use_test_mode`: Use test database with only 2002 data (default: false)
-- `start_year`: Starting year for processing (default: 2002)
-- `end_year`: Ending year for processing (default: 2023)
 - `source_db`: Path to raw database (auto-determined if not specified)
 - `target_db`: Path to processed database (auto-determined if not specified)
+- `prql_timeout`: Timeout for PRQL queries in seconds (default: 300)
+- `cleanup_temp_tables`: Whether to remove temporary tables after processing (default: true)
 
 # Returns
 - Dictionary with processing results and statistics
 
-# Example
+# Examples
 ```julia
+# Process a single year
+results = process_data("2022")
+
+# Process a range of years
+results = process_data("2020-2023")
+
+# Process all available years
+results = process_data()
+
 # Process test data (2002 only)
-results = process_raw_to_processed(use_test_mode=true)
+results = process_data(use_test_mode=true)
 
-# Process full dataset
-results = process_raw_to_processed(start_year=2002, end_year=2023)
-
-# Process specific years
-results = process_raw_to_processed(start_year=2020, end_year=2022)
+# Process with custom database paths
+results = process_data("2020-2022", source_db="custom_raw.duckdb", target_db="custom_processed.duckdb")
 ```
 """
-function process_raw_to_processed(; kwargs...)
+function process_data(years_str::String="2002-2023"; kwargs...)
+    # Parse the years string to determine start and end years
+    if contains(years_str, "-")
+        # Range format: "YYYY-YYYY"
+        parts = split(years_str, "-")
+        if length(parts) != 2
+            error("Invalid year range format. Expected 'YYYY-YYYY', got: $years_str")
+        end
+        start_year = parse(Int, strip(parts[1]))
+        end_year = parse(Int, strip(parts[2]))
+    else
+        # Single year format: "YYYY"
+        year = parse(Int, strip(years_str))
+        start_year = year
+        end_year = year
+    end
+
+    # Validate years
+    if start_year > end_year
+        error("Start year ($start_year) must be less than or equal to end year ($end_year)")
+    end
+
+    @info "Processing data for years: $start_year to $end_year"
+
     # Create processing configuration with external parameters
     config = DataProcessor.create_processing_config(;
         analysis_params=ANALYSIS_PARAMETERS,
+        start_year=start_year,
+        end_year=end_year,
         kwargs...
     )
 
-    # Run the complete processing pipeline
+    # Run the processing pipeline
     return DataProcessor.process_all_years(config)
-end
-
-"""
-    process_single_year(year::Int; kwargs...)
-
-Process a single year of raw data into the processed format.
-
-# Arguments
-- `year`: The year to process
-
-# Keywords
-- `use_test_mode`: Use test database (default: false)
-- `source_db`: Path to raw database
-- `target_db`: Path to processed database
-
-# Returns
-- Dictionary with processing results for the year
-
-# Example
-```julia
-# Process year 2022
-result = process_single_year(2022)
-
-# Process year 2002 from test database
-result = process_single_year(2002, use_test_mode=true)
-```
-"""
-function process_single_year(year::Int; kwargs...)
-    config = DataProcessor.create_processing_config(;
-        analysis_params=ANALYSIS_PARAMETERS,
-        start_year=year,
-        end_year=year,
-        kwargs...
-    )
-
-    # Ensure database structure
-    DataProcessor.ensure_processed_db_structure(config)
-
-    # Process the single year
-    return DataProcessor.process_year_complete(year, config)
 end
 
 # Export public API functions
 export fetch_prodcom_data,
     fetch_comext_data,
     fetch_combined_data,
+    process_data,
+    validate_product_config,
     ANALYSIS_PARAMETERS,
-    DB_PATH_TEST,
-    process_raw_to_processed,
-    process_single_year,
-    validate_product_config
+    DB_PATH_TEST
 
 end # module CirQuant
