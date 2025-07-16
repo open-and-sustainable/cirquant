@@ -18,8 +18,6 @@ include("utils/DatabaseAccess.jl")
 include("utils/AnalysisConfigLoader.jl")
 include("DataFetch/ProdcomDataFetch.jl")
 include("DataFetch/ComextDataFetch.jl")
-include("DataTransform/UnitConversion/UnitConverter.jl")
-include("DataTransform/ProdcomUnitConverter.jl")
 include("DataTransform/CountryCodeMapper.jl")
 include("DataTransform/DataProcessor.jl")
 
@@ -28,7 +26,6 @@ using .AnalysisConfigLoader
 using .ProdcomDataFetch
 using .ComextDataFetch
 using .CountryCodeMapper
-using .ProdcomUnitConverter
 using .DataProcessor
 
 # Load analysis parameters from configuration file
@@ -115,124 +112,6 @@ function fetch_combined_data(years_str::String="1995-2023", prodcom_datasets=not
     return true
 end
 
-"""
-    convert_prodcom_to_tonnes(year::Int; db_path::String = DB_PATH_RAW)
-
-Converts PRODCOM production data for a specific year from various units to tonnes.
-This function processes raw PRODCOM data and converts all production quantities
-to a unified measurement unit (tonnes).
-
-# Arguments
-- `year::Int`: The year to process
-- `db_path::String`: Path to the raw DuckDB database (default: DB_PATH_RAW)
-
-# Returns
-- `DataFrame`: Converted production data with columns:
-  - product_code: PRODCOM product code
-  - geo: Geographic location (country code or EU27)
-  - year: Year of data
-  - production_tonnes: Production quantity in tonnes
-
-# Example
-```julia
-# Convert year 2020 data to tonnes
-df = convert_prodcom_to_tonnes(2020)
-
-# Convert with custom database path
-df = convert_prodcom_to_tonnes(2020, db_path="path/to/database.duckdb")
-```
-"""
-function convert_prodcom_to_tonnes(year::Int; db_path::String=DB_PATH_RAW)
-    return ProdcomUnitConverter.process_prodcom_to_tonnes(db_path, year)
-end
-
-"""
-    write_product_conversion_table(db_path::String = DB_PATH_PROCESSED; kwargs...)
-
-Writes the product conversion mapping table to a DuckDB database.
-
-# Arguments
-- `db_path::String`: Path to the DuckDB database file (default: DB_PATH_PROCESSED)
-- `table_name::String`: Name of the table to create (default: "product_mapping_codes")
-- `replace::Bool`: Whether to replace existing table if it exists (default: true)
-
-# Returns
-- `Bool`: true if successful, false otherwise
-
-# Example
-```julia
-# Write to the default processed database
-success = write_product_conversion_table()
-
-# Write to a custom database
-success = write_product_conversion_table("path/to/custom.duckdb")
-```
-"""
-function write_product_conversion_table(db_path::String=DB_PATH_PROCESSED; kwargs...)
-    return AnalysisConfigLoader.write_product_conversion_table(db_path; kwargs...)
-end
-
-"""
-    read_product_conversion_table(db_path::String = DB_PATH_PROCESSED; kwargs...)
-
-Reads the product conversion table from a DuckDB database.
-
-# Arguments
-- `db_path::String`: Path to the DuckDB database file (default: DB_PATH_PROCESSED)
-- `table_name::String`: Name of the table to read (default: "product_mapping_codes")
-
-# Returns
-- `DataFrame`: The product mapping data from the database
-- `nothing`: If the table doesn't exist or an error occurs
-"""
-function read_product_conversion_table(db_path::String=DB_PATH_PROCESSED; kwargs...)
-    return AnalysisConfigLoader.read_product_conversion_table(db_path; kwargs...)
-end
-
-"""
-    get_product_mapping_data()
-
-Returns a DataFrame containing the product mapping between different classification systems.
-
-The DataFrame includes:
-- `product_id`: Unique identifier for each product category
-- `product`: Human-readable product name
-- `prodcom_code`: PRODCOM classification code
-- `hs_codes`: Harmonized System codes (comma-separated if multiple)
-
-# Returns
-- `DataFrame`: Product mapping data
-"""
-function get_product_mapping_data()
-    return AnalysisConfigLoader.load_product_mappings()
-end
-
-"""
-    get_product_by_code(code::String, code_type::Symbol = :prodcom_code; db_path::String = DB_PATH_PROCESSED)
-
-Look up product information by a specific code.
-
-# Arguments
-- `code::String`: The code to search for
-- `code_type::Symbol`: Type of code (:prodcom_code or :hs_codes)
-- `db_path::String`: Path to the DuckDB database file (default: DB_PATH_PROCESSED)
-
-# Returns
-- `DataFrame`: Matching products
-- `nothing`: If no matches found or error occurs
-
-# Example
-```julia
-# Look up by PRODCOM code
-product = get_product_by_code("26.20.12.30", :prodcom_code)
-
-# Look up by HS code
-product = get_product_by_code("8507.60", :hs_codes)
-```
-"""
-function get_product_by_code(code::String, code_type::Symbol=:prodcom_code; db_path::String=DB_PATH_PROCESSED)
-    return AnalysisConfigLoader.get_product_by_code(db_path, code, code_type)
-end
 
 """
     validate_product_config(config_path::String = joinpath(@__DIR__, "..", "config", "products.toml"))
@@ -349,16 +228,6 @@ end
 export fetch_prodcom_data,
     fetch_comext_data,
     fetch_combined_data,
-    convert_prodcom_to_tonnes,
-    write_product_conversion_table,
-    read_product_conversion_table,
-    get_product_mapping_data,
-    get_product_by_code,
-    create_circularity_table,
-    validate_circularity_table,
-    create_circularity_tables_range,
-    inspect_raw_tables,
-    ensure_prql_installed,
     ANALYSIS_PARAMETERS,
     DB_PATH_TEST,
     process_raw_to_processed,

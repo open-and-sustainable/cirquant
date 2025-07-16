@@ -143,6 +143,22 @@ end
 
 # --- core ------------------------------------------------------------------
 
+"""
+    create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::String)
+
+Create a new table in DuckDB with appropriate column types based on the DataFrame schema.
+This function handles complex type mappings and creates tables that can handle various data types.
+
+# Arguments
+- `df`: DataFrame containing the data schema
+- `con`: Active DuckDB connection
+- `table`: Name of the table to create
+
+# Notes
+- Drops existing table if it exists
+- Maps Julia types to appropriate DuckDB types
+- Handles special cases like Date, DateTime, and mixed type columns
+"""
 function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::String)
     type_map = Dict(
         Int32 => "INTEGER", Int64 => "BIGINT",
@@ -223,6 +239,17 @@ function create_table_with_types!(df::DataFrame, con::DuckDB.Connection, table::
     end
 end
 
+"""
+    create_and_load_table_directly!(df, con, table)
+
+Create a table and load data directly using INSERT statements.
+This is the primary method for loading data into DuckDB.
+
+# Arguments
+- `df`: DataFrame to load
+- `con`: Active DuckDB connection
+- `table`: Name of the table to create/populate
+"""
 function create_and_load_table_directly!(df, con, table)
     create_table_with_types!(df, con, table)
     for row in eachrow(df)
@@ -231,6 +258,23 @@ function create_and_load_table_directly!(df, con, table)
     end
 end
 
+"""
+    clean_dataframe_for_duckdb(df)
+
+Clean and prepare a DataFrame for loading into DuckDB by handling problematic values.
+
+# Arguments
+- `df`: DataFrame to clean
+
+# Returns
+- Cleaned copy of the DataFrame with problematic values converted to missing
+
+# Notes
+- Converts special string values like ":C", "null", "NaN" to missing
+- Handles infinite numeric values
+- Converts extreme numeric values (>1e15) to missing
+- Converts Any-typed columns to strings for safety
+"""
 function clean_dataframe_for_duckdb(df)
     # Make a copy to avoid modifying the original
     clean_df = deepcopy(df)
@@ -273,6 +317,22 @@ function clean_dataframe_for_duckdb(df)
     return clean_df
 end
 
+"""
+    create_and_load_table_throughCSV!(df, con, table)
+
+Create a table and load data through an intermediate CSV file.
+This is a fallback method when direct loading fails.
+
+# Arguments
+- `df`: DataFrame to load
+- `con`: Active DuckDB connection
+- `table`: Name of the table to create/populate
+
+# Notes
+- Uses temporary CSV file for data transfer
+- Automatically cleans up temporary files
+- Falls back to chunked loading if CSV method fails
+"""
 function create_and_load_table_throughCSV!(df, con, table)
     # Clean the dataframe to ensure DuckDB compatibility
     clean_df = clean_dataframe_for_duckdb(df)
@@ -314,6 +374,21 @@ function create_and_load_table_throughCSV!(df, con, table)
     end
 end
 
+"""
+    create_and_load_table_chunked!(df, con, table, chunk_size=5000)
+
+Create a table and load data in chunks to handle large datasets.
+
+# Arguments
+- `df`: DataFrame to load
+- `con`: Active DuckDB connection
+- `table`: Name of the table to create/populate
+- `chunk_size`: Number of rows to insert per batch (default: 5000)
+
+# Notes
+- Useful for very large datasets that might cause memory issues
+- Provides progress updates during loading
+"""
 function create_and_load_table_chunked!(df, con, table, chunk_size=5000)
     # Clean the dataframe to ensure DuckDB compatibility
     clean_df = clean_dataframe_for_duckdb(df)
@@ -364,6 +439,23 @@ function create_and_load_table_chunked!(df, con, table, chunk_size=5000)
     return successful_chunks >= (total_chunks / 2)
 end
 
+"""
+    create_and_load_table_direct!(df, con, table)
+
+Main entry point for creating and loading tables with automatic fallback strategies.
+
+# Arguments
+- `df`: DataFrame to load
+- `con`: Active DuckDB connection
+- `table`: Name of the table to create/populate
+
+# Notes
+- Tries multiple loading strategies in order:
+  1. Direct INSERT statements
+  2. CSV intermediate file
+  3. Chunked loading
+- Automatically handles errors and tries alternative methods
+"""
 function create_and_load_table_direct!(df, con, table)
     # Clean and create table as before
     clean_df = clean_dataframe_for_duckdb(df)
@@ -419,6 +511,20 @@ function create_and_load_table_direct!(df, con, table)
     return successful_inserts
 end
 
+"""
+    write_duckdb_table!(df, db, table)
+
+Write a DataFrame to a DuckDB table, creating a new connection.
+
+# Arguments
+- `df`: DataFrame to write
+- `db`: Path to DuckDB database file
+- `table`: Name of the table to create/replace
+
+# Notes
+- Opens and closes its own database connection
+- Use `write_duckdb_table_with_connection!` if you have an existing connection
+"""
 write_duckdb_table!(df, db, table) = (db_conn = DuckDB.DB(db);
 con = DBInterface.connect(db_conn);
 create_and_load_table_directly!(df, con, table);
@@ -451,11 +557,20 @@ end
 """
     recreate_duckdb_database(db_path, backup_suffix="_corrupted")
 
-Handles a corrupted DuckDB database by:
-1. Renaming the existing (possibly corrupted) database file
-2. Creating a fresh, empty database file at the original path
+Creates a new DuckDB database file without modifying the existing one.
 
-Returns a tuple (success::Bool, backup_path::String)
+# Arguments
+- `db_path`: Path to the database file
+- `backup_suffix`: Suffix for backup (not used in current implementation)
+
+# Returns
+- `(success::Bool, new_db_path::String)`: Success status and path to new database
+
+# Notes
+- SAFETY: This function does NOT replace the existing database
+- Creates a new database with timestamp suffix (e.g., "db.duckdb_new_1234567890")
+- The original database remains untouched
+- User must manually rename the new database if they want to use it
 """
 function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
     # IMPORTANT: This function has been modified to NEVER replace the existing database
@@ -503,6 +618,25 @@ function recreate_duckdb_database(db_path, backup_suffix="_corrupted")
     end
 end
 
+"""
+    write_large_duckdb_table!(df, db, table)
+
+Write a large DataFrame to DuckDB with optimized settings and error handling.
+
+# Arguments
+- `df`: DataFrame to write (can be very large)
+- `db`: Path to DuckDB database file
+- `table`: Name of the table to create/replace
+
+# Returns
+- `true` if successful, `false` if failed
+
+# Notes
+- Optimized for large datasets with increased memory limits
+- Handles database corruption by creating new database if needed
+- Provides detailed progress updates and error messages
+- Automatically cleans data before insertion
+"""
 function write_large_duckdb_table!(df, db, table)
     if isempty(df)
         @warn "Skipping write to DuckDB - dataframe is empty"

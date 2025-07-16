@@ -1,3 +1,19 @@
+"""
+    AnalysisConfigLoader
+
+Module for loading and managing analysis configuration from products.toml file.
+
+Provides functionality to:
+- Load analysis parameters (circularity rates, product weights)
+- Load product mappings between PRODCOM and HS codes
+- Validate configuration files
+- Read/write product conversion tables to/from DuckDB
+
+# Exports
+- `load_analysis_parameters`: Load circularity rates and weights
+- `load_product_mappings`: Load product code mappings
+- `validate_product_config`: Validate configuration file structure
+"""
 module AnalysisConfigLoader
 
 using DataFrames
@@ -19,13 +35,16 @@ Load analysis parameters from the products.toml configuration file.
 - `config_path::String`: Path to the products.toml file (default: config/products.toml)
 
 # Returns
-- `Dict{String, Any}`: Analysis parameters dictionary in the format expected by CirQuant
+- `Dict{String, Any}`: Analysis parameters dictionary containing:
+  - `current_circularity_rates`: Dict mapping PRODCOM codes to current circularity rates
+  - `potential_circularity_rates`: Dict mapping PRODCOM codes to potential circularity rates
+  - `product_weights_tonnes`: Dict mapping PRODCOM codes to product weights in tonnes
+  - `placeholder_for_future_params`: Empty Dict for future parameters
 
-# TODO
-- Parse current_circularity_rates from products.toml
-- Parse potential_circularity_rates from products.toml
-- Parse product_weights_tonnes from products.toml
-- Format as ANALYSIS_PARAMETERS structure
+# Notes
+- PRODCOM codes have dots removed (e.g., "10.11.11.40" becomes "10111140")
+- Weights are converted from kg (in config) to tonnes
+- Each product can have multiple PRODCOM codes, all inherit the same parameters
 """
 function load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
     # Read the TOML file
@@ -425,7 +444,12 @@ Read the product conversion table from a DuckDB database.
 - `table_name::String`: Name of the table to read (default: "product_mapping_codes")
 
 # Returns
-- `DataFrame`: The product mapping data from the database
+- `DataFrame`: Product mapping data with columns:
+  - product_id: Unique identifier
+  - product: Product name
+  - prodcom_code: PRODCOM classification code
+  - hs_codes: Harmonized System codes
+- `nothing`: If table doesn't exist or error occurs
 - `nothing`: If the table doesn't exist or an error occurs
 """
 function read_product_conversion_table(db_path::String; table_name::String = "product_mapping_codes")
@@ -492,6 +516,8 @@ function get_product_by_code(db_path::String, code::String, code_type::Symbol = 
 end
 
 # Export additional functions that replicate ProductConversionTables functionality
+export write_product_conversion_table, write_product_conversion_table_with_connection
+export read_product_conversion_table, get_product_by_code
 export write_product_conversion_table, write_product_conversion_table_with_connection, read_product_conversion_table, get_product_by_code
 
 end # module AnalysisConfigLoader
