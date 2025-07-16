@@ -309,7 +309,7 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
         product_mapping_df = DataFrame(DBInterface.execute(target_conn, product_mapping_query))
 
     catch e
-        @error "Failed to load mapping tables" exception=e
+        @error "Failed to load mapping tables" exception = e
         rethrow(e)
     end
 
@@ -327,7 +327,7 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
         trade_df = DataFrame(DBInterface.execute(target_conn, trade_query))
 
     catch e
-        @error "Failed to load intermediate tables" exception=e
+        @error "Failed to load intermediate tables" exception = e
         rethrow(e)
     end
 
@@ -335,8 +335,8 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
     production_harmonized = leftjoin(
         production_df,
         country_mapping_df,
-        on = :geo => :prodcom_code,
-        makeunique = true
+        on=:geo => :prodcom_code,
+        makeunique=true
     )
 
     # Use harmonized country code, fallback to original if no mapping
@@ -359,15 +359,15 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
     # COMEXT uses HS codes, we need to map them to PRODCOM codes
     # Initialize with proper schema
     trade_expanded = DataFrame(
-        prodcom_code = String[],
-        year = Int[],
-        geo = String[],
-        level = String[],
-        import_volume_tonnes = Float64[],
-        import_value_eur = Float64[],
-        export_volume_tonnes = Float64[],
-        export_value_eur = Float64[],
-        data_source = String[]
+        prodcom_code=String[],
+        year=Int[],
+        geo=String[],
+        level=String[],
+        import_volume_tonnes=Float64[],
+        import_value_eur=Float64[],
+        export_volume_tonnes=Float64[],
+        export_value_eur=Float64[],
+        data_source=String[]
     )
 
     for row in eachrow(trade_df)
@@ -377,15 +377,15 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
         if data_source == "PRODCOM"
             # PRODCOM trade data already has PRODCOM codes - just normalize by removing dots
             push!(trade_expanded, (
-                prodcom_code = replace(String(product_code), "." => ""),
-                year = parse(Int, string(row.year)),
-                geo = String(row.geo),  # PRODCOM uses numeric codes, will be mapped later
-                level = String(row.level),
-                import_volume_tonnes = Float64(row.import_volume_tonnes),
-                import_value_eur = Float64(row.import_value_eur),
-                export_volume_tonnes = Float64(row.export_volume_tonnes),
-                export_value_eur = Float64(row.export_value_eur),
-                data_source = data_source
+                prodcom_code=replace(String(product_code), "." => ""),
+                year=parse(Int, string(row.year)),
+                geo=String(row.geo),  # PRODCOM uses numeric codes, will be mapped later
+                level=String(row.level),
+                import_volume_tonnes=Float64(row.import_volume_tonnes),
+                import_value_eur=Float64(row.import_value_eur),
+                export_volume_tonnes=Float64(row.export_volume_tonnes),
+                export_value_eur=Float64(row.export_value_eur),
+                data_source=data_source
             ))
         else
             # COMEXT data - need to map HS codes to PRODCOM codes
@@ -409,15 +409,15 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
                 # Create a row for each matching PRODCOM code
                 for prod_match in eachrow(matching_products)
                     push!(trade_expanded, (
-                        prodcom_code = replace(String(prod_match.prodcom_code), "." => ""),
-                        year = parse(Int, string(row.year)),
-                        geo = String(row.geo),  # COMEXT already uses ISO codes
-                        level = String(row.level),
-                        import_volume_tonnes = Float64(row.import_volume_tonnes),
-                        import_value_eur = Float64(row.import_value_eur),
-                        export_volume_tonnes = Float64(row.export_volume_tonnes),
-                        export_value_eur = Float64(row.export_value_eur),
-                        data_source = data_source
+                        prodcom_code=replace(String(prod_match.prodcom_code), "." => ""),
+                        year=parse(Int, string(row.year)),
+                        geo=String(row.geo),  # COMEXT already uses ISO codes
+                        level=String(row.level),
+                        import_volume_tonnes=Float64(row.import_volume_tonnes),
+                        import_value_eur=Float64(row.import_value_eur),
+                        export_volume_tonnes=Float64(row.export_volume_tonnes),
+                        export_value_eur=Float64(row.export_value_eur),
+                        data_source=data_source
                     ))
                 end
             else
@@ -431,8 +431,8 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
     merged_data = outerjoin(
         production_harmonized,
         trade_expanded,
-        on = [:prodcom_code, :geo, :year],
-        makeunique = true
+        on=[:prodcom_code, :geo, :year],
+        makeunique=true
     )
 
     # Clean up the merged data
@@ -478,7 +478,7 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
         #@info "Created harmonized table '$table_name' with $(nrow(merged_data)) records"
 
     catch e
-        @error "Failed to write harmonized data" exception=e
+        @error "Failed to write harmonized data" exception = e
         rethrow(e)
     end
 
@@ -524,7 +524,7 @@ function step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig,
             for row in eachrow(harmonized_df)
                 # Find matching PRODCOM data
                 prodcom_match = filter(r -> r.product_code == row.product_code &&
-                                           r.geo == row.geo, prodcom_df)
+                        r.geo == row.geo, prodcom_df)
 
                 if nrow(prodcom_match) > 0
                     p = prodcom_match[1, :]
@@ -554,7 +554,7 @@ function step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig,
         #@info "Created $final_table with $(nrow(harmonized_df)) records"
 
     catch e
-        @error "Failed to create production_trade table" exception=e
+        @error "Failed to create production_trade table" exception = e
         rethrow(e)
     end
 end
@@ -883,12 +883,10 @@ export ProcessingConfig,
     step2_process_unit_conversions,
     step3_process_production_data,
     step4_process_trade_data,
-    step4b_fill_prodcom_trade_fallback,
     step5_create_circularity_indicators,
     step6_create_country_aggregates,
     step7_create_product_aggregates,
     step8_apply_circularity_parameters,
-    step9_cleanup_temp_tables,
-    harmonize_production_trade_data
+    step9_cleanup_temp_tables
 
 end # module DataProcessor
