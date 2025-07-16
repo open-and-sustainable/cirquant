@@ -2,8 +2,8 @@
 # This combines production and trade data to calculate apparent consumption
 # and prepare the structure for circularity metrics
 
-# Start with harmonized production and trade data
-from h = production_trade_harmonized_{{YEAR}}
+# Start with production and trade data (with PRODCOM fallback)
+from h = production_trade_{{YEAR}}
 
 # All data is already harmonized, set circularity parameters to NULL for now
 derive {

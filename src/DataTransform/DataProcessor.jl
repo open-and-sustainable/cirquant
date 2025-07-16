@@ -155,7 +155,7 @@ function process_year_complete(year::Int, config::ProcessingConfig)
         step4c_fill_prodcom_trade_fallback(year, config, target_conn)
 
         # Step 5: Create main circularity indicators table
-        #step5_create_circularity_indicators(year, config)
+        step5_create_circularity_indicators(year, config, target_conn)
 
         # Step 6: Calculate country aggregates
         #step6_create_country_aggregates(year, config)
@@ -288,306 +288,68 @@ Fill in PRODCOM trade data where COMEXT has zero values.
 This provides a fallback for products/countries not covered by COMEXT.
 """
 function step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
-    @info "Filling in PRODCOM trade data where COMEXT is zero for year $year..."
+    @info "Creating production_trade_$year table with PRODCOM fallback data..."
 
-    # Connect to source database only (target connection passed as parameter)
-    conn_source = DBInterface.connect(DuckDB.DB, config.source_db)
+    final_table = "production_trade_$year"
+    harmonized_table = "production_trade_harmonized_$year"
 
     try
-        # Load country mapping for PRODCOM numeric codes directly
-        country_mapping_df = CountryCodeMapper.get_country_code_mapping()
-
         # Load harmonized data
-        harmonized_table = "production_trade_harmonized_$year"
+        harmonized_df = DataFrame(DBInterface.execute(target_conn, "SELECT * FROM $harmonized_table"))
 
-        # Check if table exists before trying to read
-        table_exists_query = "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = '$harmonized_table'"
-        exists_result = DBInterface.execute(target_conn, table_exists_query) |> DataFrame
-
-        if exists_result.cnt[1] == 0
-            @error "Table $harmonized_table does not exist!"
-            DBInterface.close!(conn_source)
-            return
-        end
-
-        harmonized_query = "SELECT * FROM $harmonized_table"
-        harmonized_df = DataFrame(DBInterface.execute(target_conn, harmonized_query))
-
-        @info "Loaded harmonized data: $(nrow(harmonized_df)) rows, $(ncol(harmonized_df)) columns"
-
-        # Query PRODCOM trade data and units
-        prodcom_trade_query = """
+        # Get PRODCOM trade data from trade_temp table (already in processed database)
+        prodcom_sql = """
             SELECT
-                prccode as product_code,
-                decl as geo,
-                indicators,
-                TRY_CAST(value AS DOUBLE) as value
-            FROM prodcom_ds_056120_$year
-            WHERE indicators IN ('IMPQNT', 'EXPQNT', 'IMPVAL', 'EXPVAL')
-            AND value NOT IN ('kg', 'p/st', 'm', 'm2', 'm3', 'l', 'hl', 'ct/l')
-            AND TRY_CAST(value AS DOUBLE) IS NOT NULL
+                product_code,
+                geo,
+                import_volume_tonnes,
+                import_value_eur,
+                export_volume_tonnes,
+                export_value_eur
+            FROM trade_temp_$year
+            WHERE data_source = 'PRODCOM'
+                AND (import_volume_tonnes > 0 OR import_value_eur > 0
+                     OR export_volume_tonnes > 0 OR export_value_eur > 0)
         """
-        prodcom_trade_df = DataFrame(DBInterface.execute(conn_source, prodcom_trade_query))
 
-        # Query units for the products
-        prodcom_units_query = """
-            SELECT DISTINCT
-                prccode as product_code,
-                value as unit
-            FROM prodcom_ds_056120_$year
-            WHERE indicators = 'QNTUNIT'
-            AND prccode IN (SELECT DISTINCT prccode FROM prodcom_ds_056120_$year WHERE indicators IN ('IMPQNT', 'EXPQNT'))
-        """
-        prodcom_units_df = DataFrame(DBInterface.execute(conn_source, prodcom_units_query))
+        prodcom_df = DataFrame(DBInterface.execute(target_conn, prodcom_sql))
 
-        # Process PRODCOM trade data
-        if nrow(prodcom_trade_df) > 0
-            # Remove dots from product codes to match harmonized format
-            prodcom_trade_df.product_code = replace.(prodcom_trade_df.product_code, "." => "")
-            prodcom_units_df.product_code = replace.(prodcom_units_df.product_code, "." => "")
+        if nrow(prodcom_df) > 0
+            # Apply fallback values to harmonized data
+            for row in eachrow(harmonized_df)
+                # Find matching PRODCOM data
+                prodcom_match = filter(r -> r.product_code == row.product_code &&
+                                           r.geo == row.geo, prodcom_df)
 
-            # Map PRODCOM country codes to ISO codes
-            prodcom_trade_df = leftjoin(
-                prodcom_trade_df,
-                country_mapping_df,
-                on = :geo => :prodcom_code,
-                makeunique = true
-            )
-            prodcom_trade_df.geo_iso = coalesce.(prodcom_trade_df.iso_code, prodcom_trade_df.geo)
-
-            # Join with units data
-            prodcom_trade_with_units = leftjoin(
-                prodcom_trade_df,
-                prodcom_units_df,
-                on = :product_code,
-                makeunique = true
-            )
-
-            # Apply conversion factors based on unit type
-            prodcom_trade_with_units.conversion_factor = map(eachrow(prodcom_trade_with_units)) do row
-                unit = ismissing(row.unit) ? "kg" : row.unit
-                product_code = row.product_code
-
-                factor = if unit == "kg"
-                    0.001  # kg to tonnes
-                elseif unit == "t"
-                    1.0  # already tonnes
-                elseif unit == "p/st"
-                    # Product-specific conversions
-                    if product_code == "28211330"
-                        0.100  # Heat pumps ~100kg per unit
-                    elseif product_code == "27114000"
-                        0.020  # PV panels ~20kg per panel
-                    elseif startswith(product_code, "2720")
-                        0.025  # Batteries ~25kg average
-                    elseif startswith(product_code, "2620")
-                        0.005  # ICT equipment ~5kg average
-                    else
-                        0.010  # 10kg default
+                if nrow(prodcom_match) > 0
+                    p = prodcom_match[1, :]
+                    # Replace zeros with PRODCOM values
+                    if row.import_volume_tonnes == 0 && p.import_volume_tonnes > 0
+                        row.import_volume_tonnes = p.import_volume_tonnes
                     end
-                elseif unit == "ce/el"
-                    0.0003  # Battery cells ~300g per cell
-                else
-                    1.0  # Unknown unit: preserve value
-                end
-
-                # Validate factor
-                if isnan(factor) || isinf(factor) || factor < 0 || factor > 1000
-                    @warn "Invalid conversion factor for $product_code unit $unit: $factor, using 1.0"
-                    1.0
-                else
-                    factor
-                end
-            end
-
-            # Convert volumes to tonnes for quantity indicators
-            prodcom_trade_with_units.value_converted = map(eachrow(prodcom_trade_with_units)) do row
-                if row.indicators in ["IMPQNT", "EXPQNT"]
-                    # Ensure valid numeric values
-                    val = ismissing(row.value) ? 0.0 : row.value
-                    factor = ismissing(row.conversion_factor) ? 1.0 : row.conversion_factor
-                    result = val * factor
-                    # Check for NaN or Inf
-                    if isnan(result) || isinf(result)
-                        @warn "Invalid conversion result for $(row.product_code): value=$val, factor=$factor"
-                        0.0
-                    else
-                        result
+                    if row.import_value_eur == 0 && p.import_value_eur > 0
+                        row.import_value_eur = p.import_value_eur
                     end
-                else
-                    # Keep monetary values as-is, but ensure they're valid
-                    val = ismissing(row.value) ? 0.0 : row.value
-                    if isnan(val) || isinf(val)
-                        @warn "Invalid monetary value for $(row.product_code): value=$val"
-                        0.0
-                    else
-                        val
+                    if row.export_volume_tonnes == 0 && p.export_volume_tonnes > 0
+                        row.export_volume_tonnes = p.export_volume_tonnes
+                    end
+                    if row.export_value_eur == 0 && p.export_value_eur > 0
+                        row.export_value_eur = p.export_value_eur
                     end
                 end
             end
 
-            # Pivot PRODCOM data to get import/export volumes and values
-            prodcom_pivot = combine(groupby(prodcom_trade_with_units, [:product_code, :geo_iso])) do group
-                # Calculate sums with safety checks
-                import_vol = 0.0
-                import_val = 0.0
-                export_vol = 0.0
-                export_val = 0.0
-
-                for row in eachrow(group)
-                    val = ismissing(row.value_converted) ? 0.0 : row.value_converted
-                    if !isnan(val) && !isinf(val) && val >= 0 && val < 1e12  # Reasonable upper bound
-                        if row.indicators == "IMPQNT"
-                            import_vol += val
-                        elseif row.indicators == "IMPVAL"
-                            import_val += val
-                        elseif row.indicators == "EXPQNT"
-                            export_vol += val
-                        elseif row.indicators == "EXPVAL"
-                            export_val += val
-                        end
-                    elseif val < 0 || val >= 1e12
-                        @warn "Skipping unreasonable value for $(row.product_code): $val"
-                    end
-                end
-
-                # Final validation before returning
-                import_vol = isnan(import_vol) || isinf(import_vol) || import_vol < 0 ? 0.0 : import_vol
-                import_val = isnan(import_val) || isinf(import_val) || import_val < 0 ? 0.0 : import_val
-                export_vol = isnan(export_vol) || isinf(export_vol) || export_vol < 0 ? 0.0 : export_vol
-                export_val = isnan(export_val) || isinf(export_val) || export_val < 0 ? 0.0 : export_val
-
-                DataFrame(
-                    import_volume_prodcom = import_vol,
-                    import_value_prodcom = import_val,
-                    export_volume_prodcom = export_vol,
-                    export_value_prodcom = export_val
-                )
-            end
-
-            # Join with harmonized data
-            harmonized_with_prodcom = leftjoin(
-                harmonized_df,
-                prodcom_pivot,
-                on = [:product_code => :product_code, :geo => :geo_iso]
-            )
-
-            # Fill in zeros with PRODCOM data where applicable
-            records_updated = 0
-            updated_records = Set{Tuple{String, String, Int}}()  # Track which records were updated
-
-            for row in eachrow(harmonized_with_prodcom)
-                record_updated = false
-
-                # Fill import volume if COMEXT is zero but PRODCOM has data
-                if row.import_volume_tonnes == 0.0 && !ismissing(row.import_volume_prodcom) && row.import_volume_prodcom > 0
-                    row.import_volume_tonnes = row.import_volume_prodcom
-                    record_updated = true
-                end
-
-                # Fill import value
-                if row.import_value_eur == 0.0 && !ismissing(row.import_value_prodcom) && row.import_value_prodcom > 0
-                    row.import_value_eur = row.import_value_prodcom
-                    record_updated = true
-                end
-
-                # Fill export volume
-                if row.export_volume_tonnes == 0.0 && !ismissing(row.export_volume_prodcom) && row.export_volume_prodcom > 0
-                    row.export_volume_tonnes = row.export_volume_prodcom
-                    record_updated = true
-                end
-
-                # Fill export value
-                if row.export_value_eur == 0.0 && !ismissing(row.export_value_prodcom) && row.export_value_prodcom > 0
-                    row.export_value_eur = row.export_value_prodcom
-                    record_updated = true
-                end
-
-                if record_updated
-                    push!(updated_records, (row.product_code, row.geo, row.year))
-                    records_updated += 1
-                end
-            end
-
-            # Create a clean DataFrame with only the original columns
-            clean_harmonized = DataFrame()
-            for col in names(harmonized_df)
-                if hasproperty(harmonized_with_prodcom, Symbol(col))
-                    clean_harmonized[!, Symbol(col)] = harmonized_with_prodcom[!, Symbol(col)]
-                else
-                    # This shouldn't happen, but add safety
-                    @warn "Column $col missing after join, using original data"
-                    clean_harmonized[!, Symbol(col)] = harmonized_df[!, Symbol(col)]
-                end
-            end
-            harmonized_with_prodcom = clean_harmonized
-
-            # Ensure year column is Integer type before writing
-            if hasproperty(harmonized_with_prodcom, :year)
-                if eltype(harmonized_with_prodcom.year) <: AbstractString
-                    harmonized_with_prodcom.year = parse.(Int, harmonized_with_prodcom.year)
-                elseif !(eltype(harmonized_with_prodcom.year) <: Integer)
-                    harmonized_with_prodcom.year = convert.(Int, harmonized_with_prodcom.year)
-                end
-            end
-
-            # Ensure all numeric columns are valid (no NaN or Inf)
-            for col in [:import_volume_tonnes, :import_value_eur, :export_volume_tonnes, :export_value_eur,
-                        :production_volume_tonnes, :production_value_eur]
-                if hasproperty(harmonized_with_prodcom, col)
-                    harmonized_with_prodcom[!, col] = map(harmonized_with_prodcom[!, col]) do x
-                        if ismissing(x) || isnan(x) || isinf(x) || x < 0 || x > 1e12
-                            if !ismissing(x) && (isnan(x) || isinf(x) || x < 0 || x > 1e12)
-                                @warn "Invalid value in column $col: $x, replacing with 0.0"
-                            end
-                            0.0
-                        else
-                            x
-                        end
-                    end
-                end
-            end
-
-            # Close source connection
-            DBInterface.close!(conn_source)
-
-            # Write to a TEST table instead of updating the harmonized table
-            test_table_name = "prodcom_fallback_test_$year"
-            @info "Writing PRODCOM fallback data to test table: $test_table_name"
-
-            # Only write the records that were actually updated
-            updated_df = DataFrame()
-            for (idx, row) in enumerate(eachrow(harmonized_with_prodcom))
-                key = (row.product_code, row.geo, row.year)
-                if key in updated_records
-                    push!(updated_df, row)
-                end
-            end
-
-            @info "Writing $(nrow(updated_df)) updated records to test table"
-
-            # Write to test table using existing connection
-            DatabaseAccess.write_duckdb_table_with_connection!(updated_df, target_conn, test_table_name)
-
-            @info "Successfully wrote PRODCOM fallback data to test table $test_table_name"
-            @info "Original harmonized table remains unchanged"
-            @info "Updated $records_updated records with PRODCOM trade data (in test table)"
-        else
-            @info "No PRODCOM trade data available for fallback"
-            # Close source connection
-            DBInterface.close!(conn_source)
+            @info "Applied PRODCOM fallback data to $(nrow(prodcom_match)) records"
         end
 
-        # Connections already closed above
+        # Write final table
+        DBInterface.execute(target_conn, "DROP TABLE IF EXISTS $final_table")
+        DatabaseAccess.write_duckdb_table_with_connection!(harmonized_df, target_conn, final_table)
+
+        @info "Created $final_table with $(nrow(harmonized_df)) records"
 
     catch e
-        # Ensure connections are closed even on error
-        try
-            DBInterface.close!(conn_source)
-        catch close_err
-            @warn "Failed to close source connection" exception=close_err
-        end
-        @error "Failed to fill PRODCOM trade fallback" exception=e
+        @error "Failed to create production_trade table" exception=e
         rethrow(e)
     end
 end
@@ -597,7 +359,7 @@ end
 
 Step 5: Create the main circularity indicators table by combining production and trade data.
 """
-function step5_create_circularity_indicators(year::Int, config::ProcessingConfig)
+function step5_create_circularity_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     prql_path = joinpath(PRQL_DIR, "circularity_indicators.prql")
     table_name = "$(CIRCULARITY_TABLE_PREFIX)$(year)"
 
@@ -610,7 +372,7 @@ function step5_create_circularity_indicators(year::Int, config::ProcessingConfig
     # Execute PRQL query
     execute_prql_to_table(
         config.target_db,
-        config.target_db,
+        target_conn,
         prql_query,
         table_name
     )
