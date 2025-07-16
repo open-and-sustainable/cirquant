@@ -3,8 +3,8 @@ module CirQuant
 using DataFrames, ProdcomAPI, ComextAPI
 
 # Define the database paths as constants
-const DB_PATH_RAW = "CirQuant-database/raw/CirQuant_2002-2023.duckdb"
-const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_2002-2023.duckdb"
+const DB_PATH_RAW = "CirQuant-database/raw/CirQuant_2002-2024.duckdb"
+const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_2002-2024.duckdb"
 
 # Test database for development (contains only 2002 data)
 const DB_PATH_TEST = "CirQuant-database/raw/test.duckdb"
@@ -33,7 +33,7 @@ global ANALYSIS_PARAMETERS = AnalysisConfigLoader.load_analysis_parameters()
 
 
 """
-    fetch_prodcom_data(years_str::String="2002-2023", custom_datasets=nothing)
+    fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing)
 
 Fetches PRODCOM data using the external ProdcomAPI package and saves it to the raw DuckDB database.
 This function delegates all Eurostat API interactions to ProdcomAPI.jl, which handles the
@@ -42,20 +42,20 @@ data fetch process and persisting results to the database.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2023".
+              Default is "2002-2024".
 - `custom_datasets`: Optional. An array of dataset IDs to fetch.
                    If not provided, default datasets will be used.
 
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_prodcom_data(years_str::String="2002-2023", custom_datasets=nothing)
+function fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing)
     @info "Fetching PRODCOM data for years $years_str and saving to database"
     return ProdcomDataFetch.fetch_prodcom_data(years_str, custom_datasets; db_path=DB_PATH_RAW)
 end
 
 """
-    fetch_comext_data(years_str::String="1995-2023", custom_datasets=nothing)
+    fetch_comext_data(years_str::String="2002-2024", custom_datasets=nothing)
 
 Fetches COMEXT data using the external ComextAPI package and saves it to the raw DuckDB database.
 This function focuses on the data fetch and storage part of the workflow.
@@ -63,27 +63,27 @@ The years_str parameter should be in the format "START_YEAR-END_YEAR".
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "1995-2023".
+              Default is "2002-2024".
 - `custom_datasets`: Optional. An array of dataset IDs to fetch.
                    If not provided, uses available datasets from ComextAPI.
 
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_comext_data(years_str::String="2002-2023", custom_datasets=nothing)
+function fetch_comext_data(years_str::String="2002-2024", custom_datasets=nothing)
     @info "Fetching COMEXT data for years $years_str and saving to database"
     return ComextDataFetch.fetch_comext_data(years_str, custom_datasets; db_path=DB_PATH_RAW)
 end
 
 """
-    fetch_combined_data(years_str::String="1995-2023", prodcom_datasets=nothing, comext_datasets=nothing)
+    fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=nothing, comext_datasets=nothing)
 
 Fetches both PRODCOM and COMEXT data for the same year range and saves to the same DuckDB database.
 This is the main function to use for comprehensive data collection as requested.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "1995-2023".
+              Default is "1995-2024".
 - `prodcom_datasets`: Optional. Array of Prodcom dataset IDs to fetch.
                      If not provided, defaults to ["ds-056120"].
 - `comext_datasets`: Optional. Array of Comext dataset IDs to fetch.
@@ -92,7 +92,7 @@ Parameters:
 Returns:
 - A dictionary with statistics for both data sources
 """
-function fetch_combined_data(years_str::String="1995-2023", prodcom_datasets=nothing, comext_datasets=nothing)
+function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=nothing, comext_datasets=nothing)
     @info "Starting combined data fetch for PRODCOM and COMEXT data for years $years_str"
 
     try
@@ -146,7 +146,7 @@ function validate_product_config(config_path::String = joinpath(@__DIR__, "..", 
 end
 
 """
-    process_data(years_str::String="2002-2023"; kwargs...)
+    process_data(years_str::String="2002-2024"; kwargs...)
 
 Process raw data into the processed database format for the specified year(s).
 This function follows the same pattern as fetch_data functions, accepting either
@@ -156,7 +156,7 @@ a single year or a range of years.
 - `years_str`: String specifying the year(s) to process. Can be:
   - Single year: "2022"
   - Year range: "2020-2023"
-  Default is "2002-2023".
+  Default is "2002-2024".
 
 # Keywords
 - `use_test_mode`: Use test database with only 2002 data (default: false)
@@ -186,7 +186,7 @@ results = process_data(use_test_mode=true)
 results = process_data("2020-2022", source_db="custom_raw.duckdb", target_db="custom_processed.duckdb")
 ```
 """
-function process_data(years_str::String="2002-2023"; kwargs...)
+function process_data(years_str::String="2002-2024"; kwargs...)
     # Parse the years string to determine start and end years
     if contains(years_str, "-")
         # Range format: "YYYY-YYYY"

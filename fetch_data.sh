@@ -17,11 +17,11 @@
 #   ./fetch_data.sh "2022-2022"      # Fetches data for 2022 only
 
 # Get years parameter with default value
-YEARS=${1:-"2002-2023"}
+YEARS=${1:-"2002-2024"}
 
 echo "=== CirQuant Raw Data Fetcher ==="
 echo "Fetching data for years: $YEARS"
-echo "Output will be saved to CirQuant-database/raw/CirQuant_2002-2023.duckdb"
+echo "Output will be saved to CirQuant-database/raw/CirQuant_2002-2024.duckdb"
 echo
 
 # Run the Julia script

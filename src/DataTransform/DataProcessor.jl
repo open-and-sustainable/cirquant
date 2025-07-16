@@ -753,6 +753,9 @@ function execute_prql_to_table(source_db::String, target_conn::DuckDB.Connection
     end
 
     try
+        # Ensure any pending writes are visible to the PRQL query execution
+        DBInterface.execute(target_conn, "CHECKPOINT")
+
         # Execute PRQL query using DatabaseAccess
         result_df = DatabaseAccess.executePRQL(source_db, temp_prql)
 
