@@ -71,11 +71,31 @@ When processing trade statistics, both PRODCOM and COMEXT contain import/export 
 - **PRODCOM indicators**: IMPVAL, EXPVAL (values), IMPQNT, EXPQNT (quantities)
 - **COMEXT indicators**: VALUE_EUR, QUANTITY_KG for flows 1 (imports) and 2 (exports)
 
-The system prioritizes data sources as follows:
-1. **Primary source**: COMEXT data is used for all trade statistics when available
-2. **Fallback**: PRODCOM trade indicators are only used when COMEXT data is missing for specific product/year combinations
+The system uses a two-stage approach to consolidate trade data:
 
-This approach ensures consistency and avoids potential discrepancies between the two sources, as COMEXT provides more comprehensive coverage at the HS code level.
+#### Stage 1: Harmonization (Step 4b)
+1. Production data from PRODCOM is combined with trade data primarily from COMEXT
+2. Product codes are mapped between PRODCOM and HS classification systems
+3. Country codes are harmonized (PRODCOM numeric codes → ISO 2-letter codes)
+4. Creates temporary table: `production_trade_harmonized_YYYY`
+
+#### Stage 2: PRODCOM Fallback Application (Step 4c)
+The system applies PRODCOM trade data as a fallback where COMEXT reports zero values:
+
+1. **Load harmonized data**: Read the `production_trade_harmonized_YYYY` table
+2. **Query PRODCOM trade records**: Extract PRODCOM trade data from `trade_temp_YYYY` where `data_source = 'PRODCOM'`
+3. **Apply fallback logic**: For each record in the harmonized data:
+   - If `import_volume_tonnes = 0` and PRODCOM has data > 0, use PRODCOM value
+   - If `import_value_eur = 0` and PRODCOM has data > 0, use PRODCOM value
+   - If `export_volume_tonnes = 0` and PRODCOM has data > 0, use PRODCOM value
+   - If `export_value_eur = 0` and PRODCOM has data > 0, use PRODCOM value
+4. **Create final table**: Write the updated data to `production_trade_YYYY`
+
+This approach ensures:
+- COMEXT remains the primary source for trade data
+- PRODCOM fills gaps where COMEXT has no data (reported as zeros)
+- No double-counting occurs (only zero values are replaced)
+- Data consistency is maintained across the processing pipeline
 
 ## Analytical Framework
 
@@ -126,13 +146,19 @@ Automated fetching from Eurostat APIs with:
 ### 4. Data Transformation - PRQL Processing
 
 - **Purpose**: Transform raw data into analysis-ready format
-- **Technology**: PRQL (Pipelined Relational Query Language)
-- **Process**:
-  - Read from raw database tables
-  - Apply product mappings (PRODCOM ↔ HS codes)
-  - Harmonize units (convert to tonnes where possible)
-  - Calculate derived indicators
-  - Handle missing values and data quality issues
+- **Technology**: PRQL (Pipelined Relational Query Language) with Julia orchestration
+- **Processing Steps**:
+  1. **Ensure product mapping** - Create/verify mapping tables between PRODCOM and HS codes
+  2. **Process unit conversions** - Convert PRODCOM units to tonnes (creates `prodcom_converted_YYYY`)
+  3. **Extract production data** - Transform PRODCOM production data (creates `production_temp_YYYY`)
+  4. **Extract trade data** - Transform COMEXT trade data (creates `trade_temp_YYYY`)
+  4b. **Harmonize data** - Merge production and trade using mappings (creates `production_trade_harmonized_YYYY`)
+  4c. **Apply PRODCOM fallback** - Fill zero COMEXT values with PRODCOM trade data (creates final `production_trade_YYYY`)
+  5. **Create circularity indicators** - Calculate apparent consumption and prepare for circularity metrics
+  6. **Create country aggregates** - Aggregate data by country for performance
+  7. **Create product aggregates** - Aggregate data by product at EU level
+  8. **Apply circularity parameters** - Add current and potential circularity rates
+  9. **Clean up temporary tables** - Remove intermediate tables to save space
 
 ### 5. Data Storage - Processed Database
 

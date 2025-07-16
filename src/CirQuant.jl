@@ -18,7 +18,6 @@ include("utils/DatabaseAccess.jl")
 include("utils/AnalysisConfigLoader.jl")
 include("DataFetch/ProdcomDataFetch.jl")
 include("DataFetch/ComextDataFetch.jl")
-include("DataTransform/CircularityProcessor.jl")
 include("DataTransform/UnitConversion/UnitConverter.jl")
 include("DataTransform/ProdcomUnitConverter.jl")
 include("DataTransform/CountryCodeMapper.jl")
@@ -28,7 +27,6 @@ using .DatabaseAccess
 using .AnalysisConfigLoader
 using .ProdcomDataFetch
 using .ComextDataFetch
-using .CircularityProcessor
 using .CountryCodeMapper
 using .ProdcomUnitConverter
 using .DataProcessor
@@ -266,137 +264,6 @@ The validation checks:
 """
 function validate_product_config(config_path::String = joinpath(@__DIR__, "..", "config", "products.toml"))
     return AnalysisConfigLoader.validate_product_config(config_path)
-end
-
-"""
-    create_circularity_table(year::Int; db_path::String = DB_PATH_PROCESSED, replace::Bool = false)
-
-Creates the main circularity indicators table structure in the processed database for a specific year.
-The table contains dimensions, key indicators, and circularity metrics.
-
-# Arguments
-- `year::Int`: The year for which to create the table
-- `db_path::String`: Path to the DuckDB database (default: DB_PATH_PROCESSED)
-- `replace::Bool`: Whether to replace existing table if it exists (default: false)
-
-# Returns
-- `Bool`: true if successful, false otherwise
-
-# Example
-```julia
-# Create table for year 2023
-success = create_circularity_table(2023)
-
-# Create table with replace option
-success = create_circularity_table(2023, replace=true)
-```
-"""
-function create_circularity_table(year::Int; db_path::String=DB_PATH_PROCESSED, replace::Bool=false)
-    return CircularityProcessor.create_circularity_table(year; db_path=db_path, replace=replace)
-end
-
-"""
-    validate_circularity_table(year::Int; db_path::String = DB_PATH_PROCESSED)
-
-Validates that the circularity table for a given year exists and has the correct structure.
-
-# Arguments
-- `year::Int`: The year to validate
-- `db_path::String`: Path to the DuckDB database (default: DB_PATH_PROCESSED)
-
-# Returns
-- `Dict`: Dictionary with validation results
-
-# Example
-```julia
-# Validate table for year 2023
-validation_result = validate_circularity_table(2023)
-if validation_result[:exists] && validation_result[:has_correct_columns]
-    println("Table is valid with \$(validation_result[:row_count]) rows")
-end
-```
-"""
-function validate_circularity_table(year::Int; db_path::String=DB_PATH_PROCESSED)
-    return CircularityProcessor.validate_circularity_table(year; db_path=db_path)
-end
-
-"""
-    create_circularity_tables_range(start_year::Int, end_year::Int;
-                                  db_path::String = DB_PATH_PROCESSED,
-                                  replace::Bool = false)
-
-Creates circularity indicator tables for a range of years.
-
-# Arguments
-- `start_year::Int`: Starting year
-- `end_year::Int`: Ending year (inclusive)
-- `db_path::String`: Path to the DuckDB database (default: DB_PATH_PROCESSED)
-- `replace::Bool`: Whether to replace existing tables (default: false)
-
-# Returns
-- `Dict`: Summary of results with counts of successful and failed table creations
-
-# Example
-```julia
-# Create tables for years 1995 to 2023
-results = create_circularity_tables_range(1995, 2023)
-println("Created \$(results[:successful]) tables successfully")
-```
-"""
-function create_circularity_tables_range(start_year::Int, end_year::Int;
-    db_path::String=DB_PATH_PROCESSED,
-    replace::Bool=false)
-    return CircularityProcessor.create_circularity_tables_range(start_year, end_year;
-        db_path=db_path, replace=replace)
-end
-
-"""
-    inspect_raw_tables(db_path::String, year::Int; show_sample::Bool = false)
-
-Inspects the structure of raw database tables for a given year.
-Shows column names and types for PRODCOM and COMEXT tables.
-
-# Arguments
-- `db_path::String`: Path to the raw DuckDB database (default: DB_PATH_RAW)
-- `year::Int`: Year to inspect
-- `show_sample::Bool`: Whether to show sample data (default: false)
-
-# Returns
-- `Dict`: Dictionary containing table information for each dataset
-
-# Example
-```julia
-# Inspect tables for year 2009
-table_info = inspect_raw_tables(DB_PATH_RAW, 2009)
-
-# Inspect with sample data
-table_info = inspect_raw_tables(DB_PATH_RAW, 2009, show_sample=true)
-```
-"""
-function inspect_raw_tables(db_path::String=DB_PATH_RAW, year::Int=2009; show_sample::Bool=false)
-    return CircularityProcessor.inspect_raw_tables(db_path, year; show_sample=show_sample)
-end
-
-"""
-    ensure_prql_installed()
-
-Ensures the PRQL extension is installed for DuckDB.
-This should be called once before using PRQL queries.
-
-# Returns
-- `Bool`: true if PRQL is available, false otherwise
-
-# Example
-```julia
-# Install PRQL extension
-success = ensure_prql_installed()
-if success
-    println("PRQL extension is ready to use")
-end
-```
-"""
-function ensure_prql_installed()
-    return CircularityProcessor.ensure_prql_installed()
 end
 
 """

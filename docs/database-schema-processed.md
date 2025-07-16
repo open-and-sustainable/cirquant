@@ -6,6 +6,25 @@ The processed database contains transformed and analysis-ready data derived from
 
 **Database**: `CirQuant-database/processed/CirQuant_2002-2023.duckdb`
 
+## Table Types
+
+### Persistent Tables
+These tables remain in the database after processing:
+- `circularity_indicators_YYYY` - Main analysis results
+- `production_trade_YYYY` - Combined production and trade data with PRODCOM fallback
+- `country_aggregates_YYYY` - Pre-calculated country-level aggregates
+- `product_aggregates_YYYY` - Pre-calculated product-level EU aggregates
+- `country_code_mapping` - PRODCOM to ISO country code mappings
+- `parameters_circularity_rate` - Product-specific circularity parameters
+- `product_mapping_codes` - PRODCOM to HS code mappings
+
+### Temporary Tables
+These tables are created during processing and removed in step 9:
+- `prodcom_converted_YYYY` - Unit-converted PRODCOM data
+- `production_temp_YYYY` - Intermediate production data
+- `trade_temp_YYYY` - Intermediate trade data
+- `production_trade_harmonized_YYYY` - Intermediate harmonized data before PRODCOM fallback
+
 ## Core Tables
 
 ### Table: `circularity_indicators_YYYY`
@@ -32,6 +51,23 @@ Annual circularity indicators combining production and trade data.
 | estimated_material_savings_tonnes | DOUBLE | Potential material savings |
 | estimated_monetary_savings_eur | DOUBLE | Estimated monetary savings |
 
+### Table: `production_trade_YYYY`
+
+Combined production and trade data with PRODCOM fallback applied.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots |
+| year | INTEGER | Reference year |
+| geo | VARCHAR | ISO 2-letter country code or "EU27" |
+| level | VARCHAR | "country" or "EU" aggregate |
+| production_volume_tonnes | DOUBLE | Production quantity in tonnes |
+| production_value_eur | DOUBLE | Production value in EUR |
+| import_volume_tonnes | DOUBLE | Import quantity in tonnes (COMEXT or PRODCOM fallback) |
+| import_value_eur | DOUBLE | Import value in EUR (COMEXT or PRODCOM fallback) |
+| export_volume_tonnes | DOUBLE | Export quantity in tonnes (COMEXT or PRODCOM fallback) |
+| export_value_eur | DOUBLE | Export value in EUR (COMEXT or PRODCOM fallback) |
+
 ### Table: `product_mapping_codes`
 
 Mapping between PRODCOM and HS classification systems.
@@ -42,6 +78,16 @@ Mapping between PRODCOM and HS classification systems.
 | product | VARCHAR | Product category name |
 | prodcom_code | VARCHAR | PRODCOM code (with dots, e.g., "27.11.40.00") |
 | hs_codes | VARCHAR | Comma-separated HS codes (e.g., "8541.43") |
+
+### Table: `country_code_mapping`
+
+Mapping between PRODCOM numeric country codes and ISO 2-letter codes.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| prodcom_code | VARCHAR | PRODCOM numeric code (e.g., "001" for France) |
+| iso_code | VARCHAR | ISO 2-letter code (e.g., "FR" for France) |
+| country_name | VARCHAR | Full country name |
 
 ### Table: `prodcom_unit_conversions`
 

@@ -12,7 +12,7 @@
 #   ./fetch_data.sh [YEARS]
 #
 # Examples:
-#   ./fetch_data.sh                  # Fetches data for 1995-2023 (default)
+#   ./fetch_data.sh                  # Fetches data for 2002-2023 (default)
 #   ./fetch_data.sh "2020-2023"      # Fetches data for 2020-2023
 #   ./fetch_data.sh "2022-2022"      # Fetches data for 2022 only
 

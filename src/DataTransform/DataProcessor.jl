@@ -6,7 +6,6 @@ using Dates
 using Dates: now, format
 using ..DatabaseAccess
 using ..AnalysisConfigLoader
-using ..CircularityProcessor
 using ..CountryCodeMapper
 using DBInterface
 
@@ -215,7 +214,8 @@ end
 """
     step2_process_unit_conversions(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
 
-Step 2: Process unit conversions for PRODCOM data using PRQL query.
+Step 2: Convert PRODCOM units to tonnes for consistency.
+Creates temporary table: prodcom_converted_YYYY
 """
 function step2_process_unit_conversions(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
     @info "Step 2: Converting units for quantities and volumes..."
@@ -238,7 +238,8 @@ end
 """
     step3_process_production_data(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
 
-Step 3: Process production data using PRQL query.
+Step 3: Extract and transform production data from PRODCOM.
+Creates temporary table: production_temp_YYYY
 """
 function step3_process_production_data(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
     @info "Step 3: Processing production values and volumes..."
@@ -261,7 +262,8 @@ end
 """
     step4_process_trade_data(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
 
-Step 4: Process trade data using PRQL query.
+Step 4: Extract and transform trade data from COMEXT (and PRODCOM as secondary source).
+Creates temporary table: trade_temp_YYYY
 """
 function step4_process_trade_data(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
     @info "Step 4: Processing trade values and volumes..."
@@ -287,7 +289,8 @@ end
     step4b_harmonize_production_trade_data(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Harmonize production and trade data using country and product mappings.
-This function merges production_temp and trade_temp tables using the mapping tables.
+Merges production_temp_YYYY and trade_temp_YYYY tables using the mapping tables.
+Creates temporary table: production_trade_harmonized_YYYY
 """
 function step4b_harmonize_production_trade_data(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     #@info "Harmonizing production and trade data for year $year..."
@@ -485,8 +488,9 @@ end
 """
     step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
-Fill in PRODCOM trade data where COMEXT has zero values.
-This provides a fallback for products/countries not covered by COMEXT.
+Apply PRODCOM trade data as fallback where COMEXT has zero values.
+Reads from production_trade_harmonized_YYYY and trade_temp_YYYY (PRODCOM records).
+Creates final table: production_trade_YYYY
 """
 function step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     #@info "Creating production_trade_$year table with PRODCOM fallback data..."
@@ -558,7 +562,9 @@ end
 """
     step5_create_circularity_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
-Step 5: Create the main circularity indicators table by combining production and trade data.
+Step 5: Create the main circularity indicators table.
+Reads from production_trade_YYYY and adds circularity parameters.
+Creates table: circularity_indicators_YYYY
 """
 function step5_create_circularity_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     @info "Step 5: Computing circularity indicators..."
@@ -584,6 +590,8 @@ end
     step6_create_country_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 6: Create country-level aggregates table.
+Reads from circularity_indicators_YYYY.
+Creates table: country_aggregates_YYYY
 """
 function step6_create_country_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     @info "Step 6: Aggregating data by country..."
@@ -607,6 +615,8 @@ end
     step7_create_product_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 7: Create product-level EU aggregates table.
+Reads from circularity_indicators_YYYY.
+Creates table: product_aggregates_YYYY
 """
 function step7_create_product_aggregates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     @info "Step 7: Aggregating data by product..."
@@ -667,7 +677,8 @@ end
 """
     step9_cleanup_temp_tables(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
-Step 9: Remove temporary tables created during processing.
+Step 9: Clean up temporary tables created during processing.
+Deletes: prodcom_converted_YYYY, production_temp_YYYY, trade_temp_YYYY, production_trade_harmonized_YYYY
 """
 function step9_cleanup_temp_tables(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     @info "Step 9: Cleaning up temporary tables..."
