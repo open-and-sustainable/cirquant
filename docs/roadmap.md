@@ -4,45 +4,7 @@ This document outlines the data needs and computation steps required to enhance 
 
 ## Data Development Needs
 
-### 1. Product Material Composition Data
-
-**Requirements:**
-- Material breakdown (% by weight) for each product
-- Common materials: steel, aluminum, copper, plastics, glass, electronics, etc.
-- Data structure: Product-specific, annual data (2002-2023)
-- By country and EU aggregates
-
-**Potential Sources:**
-- EU Ecodesign preparatory studies
-- Product Category Rules (PCR) documents
-- Industry material declaration databases
-
-**Implementation:**
-- Raw database: Dataset ID unknown - needs research
-- Processed database: `product_material_composition_YYYY`
-- Structure: Rows by product × geo
-- Annual updates to reflect evolving product designs and materials
-
-### 2. Material-Specific Recycling Rates
-
-**Requirements:**
-- Recycling/recovery rates for each material type
-- Annual data (2002-2023)
-- By EU country and EU aggregates
-- Stored in database, not config
-
-**Potential Sources:**
-- Eurostat waste statistics (env_wastrt)
-- Material flow accounts (env_ac_mfa)
-- National waste reports
-
-**Implementation:**
-- Raw database: `env_wastrt_YYYY` (waste treatment statistics)
-- Processed database: `material_recycling_rates_YYYY`
-- Structure: Rows by material × geo (country code)
-- Annual updates from Eurostat API
-
-### 3. Data-Driven Average Product Weights
+### 1. Data-Driven Average Product Weights
 
 **Requirements:**
 - Average weight per unit for each product
@@ -61,6 +23,44 @@ This document outlines the data needs and computation steps required to enhance 
 - Processed database: `product_average_weights_YYYY`
 - Structure: Rows by product × geo
 - Computed during data processing from PRODCOM quantity/value ratios
+
+### 2. Product Material Composition Data
+
+**Requirements:**
+- Material breakdown (% by weight) for each product
+- Common materials: steel, aluminum, copper, plastics, glass, electronics, etc.
+- Data structure: Product-specific, annual data (2002-2023)
+- By country and EU aggregates
+
+**Potential Sources:**
+- EU Ecodesign preparatory studies
+- Product Category Rules (PCR) documents
+- Industry material declaration databases
+
+**Implementation:**
+- Raw database: Dataset ID unknown - needs research
+- Processed database: `product_material_composition_YYYY`
+- Structure: Rows by product × geo
+- Annual updates to reflect evolving product designs and materials
+
+### 3. Material-Specific Recycling Rates
+
+**Requirements:**
+- Recycling/recovery rates for each material type
+- Annual data (2002-2023)
+- By EU country and EU aggregates
+- Stored in database, not config
+
+**Potential Sources:**
+- Eurostat waste statistics (env_wastrt)
+- Material flow accounts (env_ac_mfa)
+- National waste reports
+
+**Implementation:**
+- Raw database: `env_wastrt_YYYY` (waste treatment statistics)
+- Processed database: `material_recycling_rates_YYYY`
+- Structure: Rows by material × geo (country code)
+- Annual updates from Eurostat API
 
 ### 4. Current Collection/Recycling Rates
 
