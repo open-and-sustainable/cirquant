@@ -26,8 +26,8 @@ echo
 
 # Run the Julia script
 #julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_prodcom_data(\"$YEARS\")" 2>&1 | tee prodcom.log
-#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_comext_data(\"$YEARS\")" 2>&1 | tee comext.log
-julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee combined_fetch.log
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_comext_data(\"$YEARS\")" 2>&1 | tee comext.log
+#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee combined_fetch.log
 
 echo
 echo "Process completed. Log saved to combined_fetch.log"
