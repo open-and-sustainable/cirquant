@@ -19,6 +19,8 @@ To measure progress, we need quantitative indicators that capture:
 2. **Resource efficiency**: Value generated per unit of material
 3. **Trade patterns**: Dependencies on external markets for materials and products
 4. **Temporal trends**: Changes over time indicating transition progress
+5. **Material composition**: Product material breakdown for accurate recycling recovery assessment
+6. **Strategy differentiation**: Separate tracking of refurbishment vs recycling potentials
 
 ### Product Selection Rationale
 
@@ -120,6 +122,11 @@ This approach ensures:
    - Extra-EU trade (EXT_EU27_2020)
    - Dependency ratios
 
+5. **Circular Strategy Indicators**
+   - **Refurbishment**: Material savings (tonnes, EUR), Production reduction (tonnes, EUR)
+   - **Recycling**: Material savings based on composition and material-specific recovery rates
+   - Strategy-specific potential rates vs current rates
+
 ## Data Processing Pipeline
 
 ### 1. Data Acquisition
@@ -145,7 +152,7 @@ Automated fetching from Eurostat APIs with:
 
 ### 4. Data Transformation - PRQL Processing
 
-- **Purpose**: Transform raw data into analysis-ready format
+- **Purpose**: Transform raw data into analysis-ready format with enhanced circular economy metrics
 - **Technology**: PRQL (Pipelined Relational Query Language) with Julia orchestration
 - **Processing Steps**:
   1. **Ensure product mapping** - Create/verify mapping tables between PRODCOM and HS codes
@@ -154,11 +161,13 @@ Automated fetching from Eurostat APIs with:
   4. **Extract trade data** - Transform COMEXT trade data (creates `trade_temp_YYYY`)
   4b. **Harmonize data** - Merge production and trade using mappings (creates `production_trade_harmonized_YYYY`)
   4c. **Apply PRODCOM fallback** - Fill zero COMEXT values with PRODCOM trade data (creates final `production_trade_YYYY`)
-  5. **Create circularity indicators** - Calculate apparent consumption and prepare for circularity metrics
-  6. **Create country aggregates** - Aggregate data by country for performance
-  7. **Create product aggregates** - Aggregate data by product at EU level
-  8. **Apply circularity parameters** - Add current and potential circularity rates
-  9. **Clean up temporary tables** - Remove intermediate tables to save space
+  5. **Integrate material composition** - Add product material breakdown (when available)
+  6. **Apply collection rates** - Include actual recycling collection rates from waste statistics
+  7. **Calculate strategy-specific indicators** - Separate refurbishment and recycling material savings
+  8. **Create country aggregates** - Aggregate data by country for performance
+  9. **Create product aggregates** - Aggregate data by product at EU level
+  10. **Apply potential rates** - Add research-based potential rates by strategy
+  11. **Clean up temporary tables** - Remove intermediate tables to save space
 
 ### 5. Data Storage - Processed Database
 
@@ -184,16 +193,20 @@ Automated fetching from Eurostat APIs with:
 
 To avoid hardcoding values and ensure reproducibility, the system uses a centralized `ANALYSIS_PARAMETERS` global variable in the CirQuant module. This variable is populated at module initialization by loading parameters from the `config/products.toml` file. This approach provides:
 
-1. **Centralized configuration**: All analysis parameters in one place
+1. **Centralized configuration**: Research-based assumptions in one place
 2. **Traceability**: Parameters are stored in the processed database
 3. **Flexibility**: Easy to update parameters without modifying code
 4. **Transparency**: Clear record of assumptions used in analysis
 
-The configuration dictionary contains:
+The configuration contains research-based potential rates:
 
-- **Current circularity rates**: Existing material recirculation percentages by product (each product has its own explicit rate)
-- **Potential circularity rates**: Achievable rates with best practices/innovations (each product has its own explicit rate)
-- **Product weights**: Conversion factors from kilograms to tonnes for each product
+- **Potential refurbishment rates**: Achievable product reuse percentages by product
+- **Potential recycling rates**: Achievable collection and material recovery rates by product
+
+Data-driven parameters are fetched from statistical sources:
+- **Current collection/recycling rates**: From Eurostat waste statistics (forthcoming)
+- **Material composition**: Product material breakdown for recovery calculations (forthcoming)
+- **Average product weights**: Calculated from PRODCOM quantity/value ratios (forthcoming)
 
 ### Parameter Storage in Database
 
@@ -279,6 +292,8 @@ For detailed configuration instructions, see the [Configuration Guide](configura
 2. **Temporal consistency**: Flag unusual year-over-year changes
 3. **Balance checks**: Ensure value/quantity relationships are plausible
 4. **Completeness monitoring**: Track data availability by country/product/year
+5. **Material composition validation**: Ensure material percentages sum to 100%
+6. **Strategy consistency**: Verify refurbishment + recycling + disposal = 100%
 
 ### Transparency Measures
 

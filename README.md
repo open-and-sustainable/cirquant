@@ -2,7 +2,7 @@
 
 ## Project Description
 
-CirQuant aims to **quantify the potentials of circular economy** transitions for strategic product categories in the European Union by analyzing material flows, production patterns, and trade dynamics. The framework calculates potential material savings achievable through improved circularity practices.
+CirQuant aims to **quantify the potentials of circular economy** transitions for strategic product categories in the European Union by analyzing material flows, production patterns, and trade dynamics. The framework calculates potential material savings achievable through different circular strategies (refurbishment and recycling), taking into account material composition and material-specific recycling rates for more accurate assessments.
 
 https://doi.org/10.17605/OSF.IO/U6SF3
 
@@ -48,15 +48,19 @@ CirQuant uses a configuration file (`config/products.toml`) that serves two dist
 - **Code mappings**: PRODCOM codes (production) and HS codes (trade)
 - **Physical properties**: Product weights for unit conversions
 
-### 2. Circularity Assumptions (Key Analysis Inputs)
-- **Current circularity rates**: Existing material recirculation percentages
-  - Currently: Manual assumptions in config file
-  - Roadmap: Will be fetched from Eurostat waste/recycling statistics
-- **Potential circularity rates**: Achievable rates based on research and best practices
+### 2. Research-Based Assumptions (Key Analysis Inputs)
+- **Potential refurbishment rates**: Achievable product reuse percentages
+- **Potential recycling rates**: Achievable collection and recovery rates
   - These are the critical assumptions that determine analysis outcomes
   - Should be based on: technical feasibility studies, policy targets, industry reports
 
-The **potential circularity rates are the core research inputs** - they directly determine the calculated material savings and policy implications. These values should be carefully researched and documented.
+The **potential rates by strategy are the core research inputs** - they directly determine the calculated material savings and policy implications.
+
+### 3. Data-Driven Parameters (From Statistics)
+- **Current collection/recycling rates**: From Eurostat waste statistics
+- **Material composition**: Product material breakdown (forthcoming)
+- **Material recycling rates**: Recovery rates by material type
+- **Average product weights**: Calculated from PRODCOM data
 
 Before using the system:
 
@@ -79,12 +83,16 @@ using CirQuant
 validate_product_config()
 
 # Step 2: Fetch data for specific years
-# Fetch both PRODCOM and COMEXT data (recommended)
+# Fetch all data sources (PRODCOM, COMEXT, and circular economy data)
 fetch_combined_data("2020-2023")
 
 # Or fetch individually:
 # fetch_prodcom_data("2020-2023")  # Production data
 # fetch_comext_data("2020-2023")   # Trade data
+# fetch_material_composition_data("2020-2023")  # Material breakdown (stub)
+# fetch_material_recycling_rates_data("2020-2023")  # Material recovery rates (stub)
+# fetch_product_weights_data("2020-2023")  # Average weights from PRODCOM (stub)
+# fetch_product_collection_rates_data("2020-2023")  # Collection rates (stub)
 
 # Step 3: Process the fetched data
 results = process_data("2020-2023")
@@ -132,11 +140,12 @@ The DataTransform module handles the processing of raw PRODCOM and COMEXT data i
 ### Overview
 
 The module provides:
-- Creation of structured tables for circularity indicators (year-specific)
+- Creation of structured tables for circularity indicators by strategy (year-specific)
 - Loading and using product conversion mappings between PRODCOM and HS codes
 - Execution of PRQL queries to extract data from raw tables
 - Transformation and combination of production and trade data
-- Calculation of apparent consumption and circularity metrics
+- Integration of material composition and recycling rates (when available)
+- Calculation of apparent consumption and strategy-specific material savings
 
 ### Data Structure
 
@@ -165,11 +174,15 @@ Apparent Consumption:
 - `apparent_consumption_tonnes`: production + imports - exports
 - `apparent_consumption_value_eur`: Monetary value of apparent consumption
 
-Circularity Indicators:
-- `current_circularity_rate_pct`: % of material currently recirculated
-- `potential_circularity_rate_pct`: % achievable with digital innovations
-- `estimated_material_savings_tonnes`: Potential tonnes saved
-- `estimated_monetary_savings_eur`: Estimated € saved
+Circularity Indicators by Strategy:
+- **Refurbishment**:
+  - `refurbishment_material_savings_tonnes`: Material saved through product reuse
+  - `refurbishment_material_savings_eur`: Economic value of refurbishment
+  - `refurbishment_production_reduction_tonnes`: Avoided new production
+- **Recycling**:
+  - `recycling_material_savings_tonnes`: Material recovered through recycling
+  - `recycling_material_savings_eur`: Economic value of recycled materials
+  - Material recovery based on composition and material-specific rates
 
 ### Usage Example
 
@@ -268,16 +281,16 @@ The system automatically uses products defined in `config/products.toml`:
 
 - **13 product categories** are pre-configured (heat pumps, PV panels, ICT equipment, batteries, etc.)
 - **Automatic code mapping**: PRODCOM codes are used for production data, HS codes for trade data
-- **Quantifying potentials**: The gap between current and potential circularity rates determines:
-  - Estimated material savings (tonnes)
-  - Monetary value of improved resource efficiency (EUR)
-  - Policy intervention opportunities
+- **Enhanced analysis approach**:
+  - Distinguishes between refurbishment (100% material savings) and recycling strategies
+  - Incorporates material composition for accurate recycling recovery rates
+  - Uses data-driven weights and collection rates (when implemented)
+- **Quantifying potentials by strategy**: Shows material savings opportunities from:
+  - Increased refurbishment/reuse
+  - Improved recycling collection and recovery
+  - Better material separation and processing
 
-**Key Point**: The analysis results are only as good as the research behind the potential circularity rate assumptions. These should be based on:
-- Technical recycling/reuse feasibility
-- Best-in-class industry practices
-- Policy targets (e.g., EU Circular Economy Action Plan)
-- Material composition and recovery potential
+**Key Point**: The analysis results depend on research-based potential rates for each circular strategy. The framework is designed to incorporate actual data on material composition, current collection rates, and material-specific recycling rates as they become available.
 
 To add new products or modify parameters, see the [Configuration Guide](docs/configuration-guide.md).
 

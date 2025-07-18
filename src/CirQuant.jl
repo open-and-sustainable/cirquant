@@ -18,6 +18,10 @@ include("utils/DatabaseAccess.jl")
 include("utils/AnalysisConfigLoader.jl")
 include("DataFetch/ProdcomDataFetch.jl")
 include("DataFetch/ComextDataFetch.jl")
+include("DataFetch/MaterialCompositionFetch.jl")
+include("DataFetch/MaterialRecyclingRatesFetch.jl")
+include("DataFetch/ProductWeightsFetch.jl")
+include("DataFetch/ProductCollectionRatesFetch.jl")
 include("DataTransform/CountryCodeMapper.jl")
 include("DataTransform/DataProcessor.jl")
 
@@ -25,6 +29,10 @@ using .DatabaseAccess
 using .AnalysisConfigLoader
 using .ProdcomDataFetch
 using .ComextDataFetch
+using .MaterialCompositionFetch
+using .MaterialRecyclingRatesFetch
+using .ProductWeightsFetch
+using .ProductCollectionRatesFetch
 using .CountryCodeMapper
 using .DataProcessor
 
@@ -78,38 +86,136 @@ end
 """
     fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=nothing, comext_datasets=nothing)
 
-Fetches both PRODCOM and COMEXT data for the same year range and saves to the same DuckDB database.
-This is the main function to use for comprehensive data collection as requested.
+Fetches all data types for circular economy analysis for the same year range.
+This includes PRODCOM, COMEXT, and all circular economy specific datasets.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "1995-2024".
+              Default is "2002-2024".
 - `prodcom_datasets`: Optional. Array of Prodcom dataset IDs to fetch.
                      If not provided, defaults to ["ds-056120"].
 - `comext_datasets`: Optional. Array of Comext dataset IDs to fetch.
-                    If not provided,  defaults to ["DS-059341"].
+                    If not provided, defaults to ["DS-059341"].
 
 Returns:
-- A dictionary with statistics for both data sources
+- true on successful completion
 """
 function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=nothing, comext_datasets=nothing)
-    @info "Starting combined data fetch for PRODCOM and COMEXT data for years $years_str"
+    @info "Starting combined data fetch for all data sources for years $years_str"
 
     try
-        # Fetch Prodcom data first
-        @info "Step 1/2: Fetching PRODCOM data..."
-        prodcom_stats = fetch_prodcom_data(years_str, prodcom_datasets)
+        # Step 1: Fetch PRODCOM data
+        @info "Step 1/6: Fetching PRODCOM data..."
+        fetch_prodcom_data(years_str, prodcom_datasets)
         @info "PRODCOM fetch completed."
 
-        # Fetch Comext data second
-        @info "Step 2/2: Fetching COMEXT data..."
-        comext_stats = fetch_comext_data(years_str, comext_datasets)
+        # Step 2: Fetch COMEXT data
+        @info "Step 2/6: Fetching COMEXT data..."
+        fetch_comext_data(years_str, comext_datasets)
         @info "COMEXT fetch completed."
+
+        # Step 3: Fetch material composition data
+        @info "Step 3/6: Fetching material composition data..."
+        fetch_material_composition_data(years_str)
+        @info "Material composition fetch completed (stub)."
+
+        # Step 4: Fetch material recycling rates
+        @info "Step 4/6: Fetching material recycling rates..."
+        fetch_material_recycling_rates_data(years_str)
+        @info "Material recycling rates fetch completed (stub)."
+
+        # Step 5: Calculate product weights
+        @info "Step 5/6: Calculating product weights from PRODCOM data..."
+        fetch_product_weights_data(years_str)
+        @info "Product weights calculation completed (stub)."
+
+        # Step 6: Fetch product collection rates
+        @info "Step 6/6: Fetching product collection rates..."
+        fetch_product_collection_rates_data(years_str)
+        @info "Product collection rates fetch completed (stub)."
+
+        @info "All data fetching completed successfully!"
     catch e
         @error "Error in combined data fetch" exception = e
+        return false
     end
 
     return true
+end
+
+"""
+    fetch_material_composition_data(years_str::String="2002-2023")
+
+Fetches product material composition data showing material breakdown (% by weight) for each product.
+This data is essential for calculating material-specific recycling rates.
+Currently a stub - data source needs to be identified.
+
+Parameters:
+- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
+              Default is "2002-2023".
+
+Returns:
+- Nothing (stub implementation)
+"""
+function fetch_material_composition_data(years_str::String="2002-2023")
+    @info "Fetching material composition data for years $years_str"
+    return MaterialCompositionFetch.fetch_material_composition_data(years_str; db_path=DB_PATH_RAW)
+end
+
+"""
+    fetch_material_recycling_rates_data(years_str::String="2002-2023")
+
+Fetches material-specific recycling/recovery rates for each material type.
+This data is needed to calculate actual material recovery from recycling processes.
+Currently a stub - uses Eurostat env_wastrt dataset.
+
+Parameters:
+- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
+              Default is "2002-2023".
+
+Returns:
+- Nothing (stub implementation)
+"""
+function fetch_material_recycling_rates_data(years_str::String="2002-2023")
+    @info "Fetching material recycling rates data for years $years_str"
+    return MaterialRecyclingRatesFetch.fetch_material_recycling_rates_data(years_str; db_path=DB_PATH_RAW)
+end
+
+"""
+    fetch_product_weights_data(years_str::String="2002-2023")
+
+Calculates average product weights from PRODCOM quantity/value data.
+This replaces hardcoded weights in the configuration with data-driven values.
+Currently a stub - derives from existing PRODCOM data.
+
+Parameters:
+- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
+              Default is "2002-2023".
+
+Returns:
+- Nothing (stub implementation)
+"""
+function fetch_product_weights_data(years_str::String="2002-2023")
+    @info "Fetching product weights data for years $years_str"
+    return ProductWeightsFetch.fetch_product_weights_data(years_str; db_path=DB_PATH_RAW)
+end
+
+"""
+    fetch_product_collection_rates_data(years_str::String="2002-2023")
+
+Fetches product collection rates showing what percentage of end-of-life products
+are collected for recycling. Currently a stub - uses Eurostat waste datasets.
+
+Parameters:
+- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
+              Default is "2002-2023".
+
+Returns:
+- Nothing (stub implementation)
+"""
+function fetch_product_collection_rates_data(years_str::String="2002-2023")
+    @info "Fetching product collection rates data for years $years_str"
+    return ProductCollectionRatesFetch.fetch_product_collection_rates_data(years_str; db_path=DB_PATH_RAW)
 end
 
 
@@ -226,6 +332,10 @@ end
 export fetch_prodcom_data,
     fetch_comext_data,
     fetch_combined_data,
+    fetch_material_composition_data,
+    fetch_material_recycling_rates_data,
+    fetch_product_weights_data,
+    fetch_product_collection_rates_data,
     process_data,
     validate_product_config,
     ANALYSIS_PARAMETERS,

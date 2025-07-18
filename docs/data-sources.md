@@ -2,10 +2,12 @@
 
 ## Overview
 
-CirQuant fetches data from two primary Eurostat databases to analyze circular economy metrics for specific product categories:
+CirQuant fetches data from multiple sources to analyze circular economy metrics for specific product categories:
 
 1. **PRODCOM** - Production statistics for manufactured goods
 2. **COMEXT** - International trade statistics (imports/exports)
+3. **Waste Statistics** - Collection and recycling rates (forthcoming)
+4. **Material Databases** - Product material composition (forthcoming)
 
 ## PRODCOM Data
 
@@ -53,6 +55,40 @@ To manage API limitations and data volume:
    - 2: Exports
 
 3. **Product filtering**: Uses 6-digit HS codes derived from the product mapping table
+
+## Circular Economy Data Sources (Forthcoming)
+
+### Material Composition Data
+
+- **Dataset**: To be determined (not available through standard Eurostat API)
+- **Content**: Material breakdown (% by weight) for each product
+- **Structure**: Product × material × percentage, year-specific
+- **Sources being investigated**: 
+  - EU Ecodesign preparatory studies
+  - Product Environmental Footprint (PEF) databases
+  - LCA databases
+
+### Material Recycling Rates
+
+- **Dataset**: `env_wastrt` - Waste treatment statistics
+- **Content**: Recovery rates for each material type (steel, aluminum, copper, plastics, etc.)
+- **Time range**: Annual data
+- **Structure**: Material × country × recovery rate
+
+### Product Collection Rates
+
+- **Datasets**:
+  - `env_waselee` - WEEE statistics for electronics
+  - `env_wasbat` - Battery waste statistics
+  - Others to be identified for remaining products
+- **Content**: Percentage of products collected for recycling
+- **Note**: Refurbishment rates largely unavailable in official statistics
+
+### Product Average Weights
+
+- **Source**: Calculated from existing PRODCOM data
+- **Method**: Total tonnes / total units for each product
+- **Purpose**: Replace hardcoded weight assumptions with data-driven values
 
 ## Products of Interest
 
@@ -122,8 +158,19 @@ Note: DS-056121 often returns empty results due to confidentiality restrictions 
 
 ## Database Storage
 
-All fetched data is stored in DuckDB tables:
+### Raw Database
+All fetched data is stored in DuckDB tables following Eurostat dataset naming:
 - PRODCOM: `prodcom_ds_XXXXXX_YYYY` (where XXXXXX is dataset ID, YYYY is year)
 - COMEXT: `comext_ds_XXXXXX_YYYY`
+- Waste statistics: `env_waselee_YYYY`, `env_wasbat_YYYY`, `env_wastrt_YYYY` (when implemented)
+- Material composition: Dataset ID to be determined
 
-Value columns are stored as strings to accommodate both numeric values and unit indicators.
+### Processed Database
+Calculated and transformed data with meaningful names:
+- `product_material_composition_YYYY` - Material breakdown by product
+- `material_recycling_rates_YYYY` - Recovery rates by material
+- `product_average_weights_YYYY` - Calculated from PRODCOM
+- `product_collection_rates_YYYY` - From waste statistics
+- `circularity_indicators_by_strategy_YYYY` - Final analysis results
+
+Value columns in raw tables are stored as strings to accommodate both numeric values and unit indicators.
