@@ -48,7 +48,7 @@ Create a processing configuration with sensible defaults.
 - `source_db`: Path to raw database (default: uses test.duckdb if use_test_mode=true)
 - `target_db`: Path to processed database
 - `start_year`: Starting year for processing (default: 2002)
-- `end_year`: Ending year for processing (default: 2023)
+- `end_year`: Ending year for processing (default: 2024)
 - `use_test_mode`: Use test database with only 2002 data (default: false)
 - `analysis_params`: Analysis parameters for circularity calculations
 - `prql_timeout`: Timeout for PRQL queries in seconds (default: 300)
@@ -58,7 +58,7 @@ function create_processing_config(;
     source_db::String="",
     target_db::String="",
     start_year::Int=2002,
-    end_year::Int=2023,
+    end_year::Int=2024,
     use_test_mode::Bool=false,
     analysis_params::Dict{String,Any}=Dict{String,Any}(),
     prql_timeout::Int=300,
@@ -68,19 +68,19 @@ function create_processing_config(;
     if isempty(source_db)
         source_db = use_test_mode ?
                     "CirQuant-database/raw/test.duckdb" :
-                    "CirQuant-database/raw/CirQuant_2002-2023.duckdb"
+                    "CirQuant-database/raw/CirQuant_2002-2024.duckdb"
     end
 
     if isempty(target_db)
         target_db = use_test_mode ?
                     "CirQuant-database/processed/test_processed.duckdb" :
-                    "CirQuant-database/processed/CirQuant_2002-2023.duckdb"
+                    "CirQuant-database/processed/CirQuant_2002-2024.duckdb"
     end
 
     # Use only 2002 if in test mode
     if use_test_mode
-        start_year = 2002
-        end_year = 2002
+        start_year = 2024
+        end_year = 2024
     end
 
     return ProcessingConfig(
