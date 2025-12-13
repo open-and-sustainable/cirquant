@@ -18,11 +18,11 @@ include("utils/DatabaseAccess.jl")
 include("utils/AnalysisConfigLoader.jl")
 include("DataFetch/ProdcomDataFetch.jl")
 include("DataFetch/ComextDataFetch.jl")
+include("DataTransform/CountryCodeMapper.jl")
 include("DataFetch/MaterialCompositionFetch.jl")
 include("DataFetch/MaterialRecyclingRatesFetch.jl")
 include("DataFetch/ProductWeightsFetch.jl")
 include("DataFetch/ProductCollectionRatesFetch.jl")
-include("DataTransform/CountryCodeMapper.jl")
 include("DataTransform/DataProcessor.jl")
 
 using .DatabaseAccess
@@ -184,20 +184,19 @@ end
 """
     fetch_product_weights_data(years_str::String="2002-2023")
 
-Calculates average product weights from PRODCOM quantity/value data.
-This replaces hardcoded weights in the configuration with data-driven values.
-Currently a stub - derives from existing PRODCOM data.
+Calculates average product weights from PRODCOM quantity/value data and writes
+`product_average_weights_YYYY` tables to the processed DuckDB database.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
               Default is "2002-2023".
 
 Returns:
-- Nothing (stub implementation)
+- `true` if at least one table was written, otherwise `false`
 """
 function fetch_product_weights_data(years_str::String="2002-2023")
     @info "Fetching product weights data for years $years_str"
-    return ProductWeightsFetch.fetch_product_weights_data(years_str; db_path=DB_PATH_RAW)
+    return ProductWeightsFetch.fetch_product_weights_data(years_str; db_path=DB_PATH_RAW, processed_db_path=DB_PATH_PROCESSED)
 end
 
 """

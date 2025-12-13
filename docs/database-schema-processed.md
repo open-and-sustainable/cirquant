@@ -17,6 +17,7 @@ These tables remain in the database after processing:
 - `country_code_mapping` - PRODCOM to ISO country code mappings
 - `parameters_circularity_rate` - Product-specific circularity parameters
 - `product_mapping_codes` - PRODCOM to HS code mappings
+- `product_average_weights_YYYY` - Data-driven product weights derived from PRODCOM
 
 ### Temporary Tables
 These tables are created during processing and removed in step 9:
@@ -133,6 +134,20 @@ Pre-calculated product-level EU aggregates.
 | eu_exports_intra_tonnes | DOUBLE | Intra-EU exports |
 | eu_exports_extra_tonnes | DOUBLE | Extra-EU exports |
 | eu_apparent_consumption_tonnes | DOUBLE | EU-wide apparent consumption |
+
+### Table: `product_average_weights_YYYY`
+
+Data-driven average weight per product and geography, calculated from PRODCOM production quantities expressed in tonnes and in pieces.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots |
+| geo | VARCHAR | ISO 2-letter country code or "EU27_2020" for EU aggregate |
+| year | INTEGER | Reference year |
+| average_weight_kg | DOUBLE | Calculated average weight per unit (kg) |
+| tonnes_observed | DOUBLE | Total tonnes observed in the PRODCOM data used for the calculation |
+| units_observed | DOUBLE | Total unit count observed (pieces) |
+| calculation_date | VARCHAR | Timestamp when the weight calculation was executed |
 
 ## Parameter Tables
 

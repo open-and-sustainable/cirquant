@@ -23,9 +23,9 @@ function mock_prodcom_data()
             "99999999", "99999999", "88888888", "88888888"
         ],
         decl = [
-            "001", "001", "002", "002",
-            "003", "003", "004", "004",
-            "005", "005", "006", "006"
+            "004", "004", "005", "005",
+            "017", "017", "060", "060",
+            "004", "004", "005", "005"
         ],
         indicators = [
             "PRODQNT", "QNTUNIT", "PRODQNT", "QNTUNIT",
@@ -60,6 +60,7 @@ end
     for row in eachrow(result)
         @test row.prodcom_code in keys(exp)
         @test row.average_weight_kg ≈ exp[row.prodcom_code] atol=1e-6
+        @test row.geo == "EU27_2020"
     end
 
     # Ensure rows lacking corresponding mass or units are skipped
