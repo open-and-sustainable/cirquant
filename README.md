@@ -17,14 +17,6 @@ Detailed documentation is available in the [`docs/`](docs/) folder:
 - **[Processed Database Schema](docs/database-schema-processed.md)**: Structure of the transformed analysis tables
 - **[Parameters Reference](docs/parameters-reference.md)**: Metadata reference with detailed descriptions of parameter meanings and valid values
 
-## Architecture Overview
-
-CirQuant has been refactored to use the external ProdcomAPI package for fetching data from the Eurostat PRODCOM API. This separation of concerns allows for:
-
-1. A cleaner codebase with focused responsibilities
-2. The ability to use the ProdcomAPI package independently of CirQuant
-3. Simplified maintenance and updates
-
 ### Components:
 
 - **ProdcomAPI**: External package that handles communication with the Eurostat PRODCOM API
