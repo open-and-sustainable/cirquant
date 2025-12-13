@@ -1,275 +1,121 @@
 # Configuration Guide
 
-## Purpose
+CirQuant keeps every research assumption in a single TOML file: `config/products.toml`. This guide highlights how to define the product focus of your analysis, where the key inputs come from, and how to validate the configuration before running any pipelines.
 
-This guide provides step-by-step instructions for analysts to set up and configure a CirQuant analysis. It explains the practical aspects of working with the configuration file, including how to add products, modify parameters, and validate your setup.
+Use the [Parameters Reference](parameters-reference.md) for field-level details and the [Methodology](methodology.md) document to understand how these inputs propagate through the workflow.
 
-For detailed metadata about parameter meanings and valid values, see the [Parameters Reference](parameters-reference.md).
+## 1. What belongs in the configuration?
 
-## Overview
+Each product entry answers two questions:
 
-CirQuant uses a centralized configuration file (`config/products.toml`) to manage all product definitions and analysis parameters. This guide explains how to configure products for circularity analysis.
+1. **Scope** – Which products are in focus? Defined via PRODCOM and HS codes plus a descriptive name.
+2. **Potential** – What share of apparent consumption can realistically be refurbished or recycled? Captured through the `current_circularity_rate` and `potential_circularity_rate` fields inside each product’s `parameters` table, along with optional weight assumptions.
 
-## Configuration File Location
+Everything else (e.g., observed collection rates, material composition, recovery efficiencies) is fetched from statistical sources and therefore kept out of the configuration file.
 
-The main configuration file is located at:
-```
-cirquant/config/products.toml
-```
+### 1.1 Typical evidence sources
 
-This file contains:
-- Product definitions (ID, name, codes)
-- Research-based potential rates by circular strategy
-- Product identification needed for data fetching
+| Input | Primary sources | Notes |
+|-------|-----------------|-------|
+| `prodcom_codes` | Eurostat PRODCOM catalogue, correspondence tables | Always include dots (`28.21.13.30`). Avoid placeholders or aggregate prefixes unless Eurostat publishes them as valid codes. |
+| `hs_codes` | Eurostat COMEXT metadata, WCO HS explanatory notes | Provide every HS6 needed to capture imports/exports for the selected product. |
+| `weight_kg` | Manufacturer datasheets, ecodesign BoM studies, PRODCOM-derived averages | Only required when official data lacks mass units. |
+| `current_circularity_rate` | Eurostat waste statistics, industry surveys, SME interviews | Can be provisional placeholders until official statistics are integrated. |
+| `potential_circularity_rate` | Systematic literature reviews, policy targets, expert elicitation | Should reflect technical/economic potential; cite sources in comments or commit messages. |
 
-Data-driven parameters are NOT in this file:
-- Current collection/recycling rates (from Eurostat waste statistics)
-- Material composition (from external databases)
-- Average product weights (calculated from PRODCOM data)
-
-## File Structure
-
-### Basic Product Definition
-
-Each product is defined as a TOML section with the following structure:
+## 2. File anatomy
 
 ```toml
 [products.product_key]
-id = 1                              # Unique integer ID
-name = "Product Name"               # Human-readable name
-prodcom_codes = ["XX.XX.XX.XX"]     # PRODCOM code(s) - currently one per product
-hs_codes = ["XXXX.XX", "YYYY.YY"]   # HS codes - can have multiple
-
-[products.product_key.parameters]
-unit = "piece"                              # Unit of measurement (typically "piece")
-potential_refurbishment_rate = 25.0         # Achievable refurbishment rate (0-100%)
-potential_recycling_rate = 45.0             # Achievable recycling collection rate (0-100%)
-```
-
-### Example Product Entry
-
-```toml
-[products.heat_pumps]
 id = 1
 name = "Heat pumps"
 prodcom_codes = ["28.21.13.30"]
 hs_codes = ["8418.69"]
 
-[products.heat_pumps.parameters]
+[products.product_key.parameters]
+weight_kg = 100.0
 unit = "piece"
-potential_refurbishment_rate = 20.0
-potential_recycling_rate = 50.0
+current_circularity_rate = 5.0
+potential_circularity_rate = 45.0
 ```
 
-## Required Fields
+- `products.product_key` – use descriptive snake_case keys (e.g., `batteries_li_ion`). Keys appear in logs and database table names.
+- `id` – unique integer for ordering.
+- `name` – human-readable label in outputs.
+- `prodcom_codes` / `hs_codes` – arrays of codes with dots for readability.
+- `parameters` – nested table storing weights and circularity assumptions. `unit` mirrors the PRODCOM unit description to help interpret `weight_kg`.
 
-### Product Level
-- `id`: Unique integer identifier for the product
-- `name`: Descriptive name of the product
-- `prodcom_codes`: Array of PRODCOM codes (with dots, e.g., "28.21.13.30")
-- `hs_codes`: Array of HS codes (can have multiple)
+## 3. Defining or updating products
 
-### Parameters Section
-- `unit`: Unit of measurement (string, typically "piece")
-- `potential_refurbishment_rate`: Research-based achievable refurbishment rate (0-100)
-- `potential_recycling_rate`: Research-based achievable recycling collection rate (0-100)
+1. **Research the product**  
+   - Confirm it matches the selection criteria (policy relevance, material intensity, etc.).  
+   - Collect PRODCOM and HS codes, typical weights, and evidence for current/potential rates.
 
-Note: Weights and current rates are NOT configured here - they come from data sources.
+2. **Add or edit the TOML block**  
+   - Append a new `[products.<key>]` section followed by `[products.<key>.parameters]`.  
+   - Ensure IDs do not collide and maintain consistent naming conventions.
 
-## Adding a New Product
+3. **Document provenance**  
+   - Add inline comments or mention sources in the commit message (e.g., “Potential from 2024 JRC refurbishability study”).
 
-1. **Choose a unique key**: Use lowercase with underscores (e.g., `solar_inverters`)
+4. **Validate**  
+   - Run `validate_product_config()` before fetching or processing data.
 
-2. **Assign a unique ID**: Check existing products and use the next available integer
+Example:
 
-3. **Add the product section**:
 ```toml
 [products.solar_inverters]
 id = 14
 name = "Solar inverters"
-prodcom_codes = ["27.11.50.00"]  # Must be valid PRODCOM code with dots
-hs_codes = ["8504.40"]            # Must be valid HS code(s)
+prodcom_codes = ["27.11.50.00"]
+hs_codes = ["8504.40"]
 
 [products.solar_inverters.parameters]
+weight_kg = 35.0                       # Manufacturer data sheet
 unit = "piece"
-potential_refurbishment_rate = 15.0  # Based on technical feasibility studies
-potential_recycling_rate = 55.0      # Based on material composition and technology
+current_circularity_rate = 8.0         # Industry survey (2023)
+potential_circularity_rate = 60.0      # Literature review on repair/refurb potential
 ```
 
-## Modifying Existing Products
-
-To update product parameters:
-
-1. **Locate the product** in `products.toml`
-2. **Update the values** directly
-3. **Save the file**
-4. **Restart Julia** or reload the module to apply changes
-
-Example: Updating potential rates
-```toml
-[products.pv_panels.parameters]
-unit = "piece"
-potential_refurbishment_rate = 10.0   # Updated based on new feasibility study
-potential_recycling_rate = 75.0       # Updated based on improved technology
-```
-
-## Validation
-
-The system automatically validates the configuration when processing starts. To manually validate:
+## 4. Validation workflow
 
 ```julia
 using CirQuant
 validate_product_config()
 ```
 
-### Validation Checks
+Validation checks that:
+- Required fields exist and use the correct data types.
+- `potential_circularity_rate` and `current_circularity_rate` fall within 0–100.
+- `potential >= current`.
+- Product IDs and PRODCOM codes remain unique.
 
-1. **Required fields**: All fields listed above must be present
-2. **Data types**: 
-   - IDs must be integers
-   - Weights and rates must be numbers
-   - Names and codes must be strings
-3. **Value ranges**:
-   - Potential rates must be 0-100%
-   - Sum of potential_refurbishment_rate + potential_recycling_rate should not exceed 100%
-4. **Uniqueness**:
-   - Product IDs must be unique
-   - PRODCOM codes should not duplicate
+Fix any reported issues before continuing; downstream scripts assume a valid configuration.
 
-### Common Validation Errors
+## 5. How the configuration drives the pipeline
 
-```
-ERROR: Product 'heat_pumps' missing parameter: weight_kg
-```
-**Solution**: Add the missing parameter to the product's parameters section
+- **Data fetching** uses `prodcom_codes` to download PRODCOM tables and `hs_codes` to request COMEXT data. Missing or incorrect codes mean the product’s data will never enter the database.
+- **Transformation** writes configuration-derived parameters into the `parameters_circularity_rate` table inside the processed DuckDB. PRQL scripts join against this table when computing refurbishment/recycling savings.
+- **Scenario analysis** simply swaps TOML files. Maintain variants (e.g., `products_low_potential.toml`, `products_high_potential.toml`) and pass their path into your Julia session before running validation and data fetching.
 
-```
-ERROR: Product 'batteries' sum of potential rates exceeds 100%: refurbishment (40.0) + recycling (65.0) = 105.0
-```
-**Solution**: Ensure combined potential rates don't exceed 100%
+## 6. Decision checklist
 
-```
-ERROR: Duplicate product ID found: 5
-```
-**Solution**: Assign a unique ID to each product
+Before committing configuration changes:
+- Have you recorded where each potential rate or weight assumption comes from?
+- Do selection criteria still hold for every product (strategic importance, regulation, material intensity)?
+- Are all PRODCOM/HS codes up to date with the latest Eurostat releases?
+- Does validation pass without warnings?
+- Are alternative scenarios documented if uncertainty is high?
 
-## How Configuration is Used
+## 7. Troubleshooting
 
-### Data Fetching
-- PRODCOM codes are used to fetch production data from Eurostat
-- HS codes are used to fetch trade data (imports/exports)
+- **Configuration not loading** – confirm the file path (`config/products.toml`) and rerun `validate_product_config()`.
+- **Changes not applied** – restart the Julia session or re-import the CirQuant module after editing the file.
+- **Data fetch issues** – double-check code formatting (PRODCOM must include dots) and ensure the product key/ID is unique.
+- **Missing trade or production data** – revisit mapping tables; mis-specified codes prevent data from joining correctly.
 
-### Data Processing
-- Product weights are calculated from PRODCOM data (not from config)
-- Material composition determines actual recycling recovery rates
-- Potential rates from config define improvement scenarios
-- Product names provide human-readable labels in outputs
+## 8. Related documentation
 
-### Analysis Parameters
-The configuration provides:
-- `potential_refurbishment_rates` dictionary
-- `potential_recycling_rates` dictionary
-
-Data fetching populates:
-- Current collection/recycling rates from waste statistics
-- Material composition from external sources
-- Average product weights from PRODCOM calculations
-
-## Best Practices
-
-1. **Code Format**:
-   - PRODCOM codes: Include dots (e.g., "27.11.40.00")
-   - HS codes: Can include dots or not (e.g., "8541.43" or "854143")
-
-2. **Potential Rate Research**:
-   - Base on technical feasibility studies
-   - Consider infrastructure requirements
-   - Document sources in comments if needed
-
-3. **Strategy-Specific Rates**:
-   - Refurbishment: Based on product lifetime extension potential
-   - Recycling: Based on collection infrastructure and material recovery technology
-   - Consider regional variations in feasibility
-
-4. **Product Keys**:
-   - Use descriptive, lowercase names
-   - Separate words with underscores
-   - Keep consistent with product category
-
-## Important Notes
-
-### Single PRODCOM Code Limitation
-Currently, each product must have exactly ONE PRODCOM code in the array. While the structure supports multiple codes, the system expects one code per product.
-
-### HS Code Handling
-Products can have multiple HS codes. These are stored as comma-separated values and properly handled during data fetching.
-
-### No Special Entries
-Only actual products should be in the configuration. Do not add:
-- Prefix codes (like "2720" for batteries category)
-- Component entries (like "battery_cell")
-- Aggregate categories (except if they have valid PRODCOM codes like "26.20")
-
-## Troubleshooting
-
-### Configuration not loading
-```julia
-# Check file location
-isfile("config/products.toml")
-
-# Validate configuration
-validate_product_config()
-```
-
-### Changes not taking effect
-- Restart Julia session after modifying products.toml
-- Or reload the module: `using CirQuant`
-
-### Data fetching issues
-- Verify PRODCOM codes are valid and include dots
-- Check HS codes match Eurostat's format
-- Ensure products are properly defined before fetching
-
-## Example: Complete Product Addition Workflow
-
-1. **Research the product**:
-   - Find PRODCOM code from Eurostat
-   - Identify corresponding HS codes
-   - Research typical weight and circularity data
-
-2. **Add to configuration**:
-```toml
-[products.electric_motors]
-id = 15
-name = "Electric motors"
-prodcom_codes = ["27.11.10.00"]
-hs_codes = ["8501.10", "8501.20"]
-
-[products.electric_motors.parameters]
-unit = "piece"
-potential_refurbishment_rate = 30.0
-potential_recycling_rate = 55.0
-```
-
-3. **Validate**:
-```julia
-using CirQuant
-validate_product_config()
-```
-
-4. **Update database**:
-```julia
-write_product_conversion_table()
-```
-
-5. **Fetch data**:
-```julia
-fetch_prodcom_data("2023-2023")
-fetch_comext_data("2023-2023")
-```
-
-## Related Documentation
-
-- [Parameters Reference](parameters-reference.md) - Metadata reference with detailed descriptions of what each parameter means
-- [Data Sources](data-sources.md) - Information about PRODCOM and HS codes
-- [Methodology](methodology.md) - How parameters are used in analysis
+- [Parameters Reference](parameters-reference.md) – Field definitions and runtime behaviour.
+- [Methodology](methodology.md) – Analytical flow and how parameters influence indicators.
+- [Data Sources](data-sources.md) – Provenance and caveats for PRODCOM/HS data and supplementary datasets.

@@ -1,176 +1,145 @@
-# Data Sources Documentation
+# Data Sources
 
-## Overview
+This note summarises every dataset currently (or soon to be) used by CirQuant and explains how each maps onto the raw DuckDB schema documented in `docs/database-schema-raw.md`. Use it to check provenance, coverage, and limitations before running large fetch jobs or interpreting results.
 
-CirQuant fetches data from multiple sources to analyze circular economy metrics for specific product categories:
+## 1. Source inventory
 
-1. **PRODCOM** - Production statistics for manufactured goods
-2. **COMEXT** - International trade statistics (imports/exports)
-3. **Waste Statistics** - Collection and recycling rates (forthcoming)
-4. **Material Databases** - Product material composition (forthcoming)
+| Source | Role | Raw table pattern | Time span | Notes |
+|--------|------|------------------|-----------|-------|
+| **PRODCOM** (Eurostat) | Production and limited trade indicators by PRODCOM code | `prodcom_ds_056120_YYYY`, `prodcom_ds_056121_YYYY` | 1995–present (ds-056121 from 2017) | DS-056120 fetched by default; DS-056121 optional |
+| **COMEXT** (Eurostat) | Trade flows by HS6 code (imports/exports, intra/extra EU) | `comext_ds_059341_YYYY` | 2002–present | Primary source for trade data |
+| **Waste statistics** (Eurostat) | Collection rates for electronics/batteries | `env_waselee_YYYY`, `env_wasbat_YYYY` (planned) | Various | Integration pending |
+| **Waste treatment / material recovery** | Recovery efficiencies by material | `env_wastrt_YYYY` (planned) | Various | Provides recovery percentages |
+| **Material composition datasets** | Product bill-of-materials | `<dataset>_YYYY` (to be defined) | TBD | Under assessment (Ecodesign studies, PEF, LCA) |
+| **Derived weights** | Average mass per product | `product_average_weights_YYYY` (processed DB) | Derived annually | Computed from PRODCOM quantities/values |
 
-## PRODCOM Data
+Only PRODCOM and COMEXT populate the raw DuckDB today; other sources will follow the same naming convention once integrated.
 
-### Datasets Used
+## 2. PRODCOM (Production statistics)
 
-- **DS-056120**: PRODCOM annual data by PRODCOM_LIST (NACE Rev. 2) - EU aggregates
-  - Contains production, import, and export data at the EU aggregate level
-  - Indicators: PRODVAL, PRODQNT, EXPVAL, EXPQNT, IMPVAL, IMPQNT, QNTUNIT
-  - Time range: 1995-2023
+### 2.1 Datasets
 
-- **DS-056121**: PRODCOM annual data by PRODCOM_LIST (NACE Rev. 2) - EU aggregates (from 2017)
-  - Contains only PRODQNT and QNTUNIT indicators
-  - **Note**: This dataset is NOT fetched by default. It must be explicitly requested using the `custom_datasets` parameter
-  - When fetched, it often returns empty results because production quantity data is frequently not reported at the aggregate EU level for confidentiality reasons
+- **DS-056120** – Annual PRODCOM data by PRODCOM_LIST (NACE Rev. 2). Provides production, import, and export indicators for each declarant country and EU aggregates (time range 1995–2023 in the current database snapshot).
+- **DS-056121** – Supplemental dataset (from 2017) with `PRODQNT` and `QNTUNIT` indicators at finer disclosure levels. Not fetched by default because it often returns empty responses due to confidentiality; request it explicitly via the `custom_datasets` argument.
 
-### PRODCOM Indicators
+### 2.2 Raw schema alignment
 
-- `PRODVAL`: Production value in EUR
-- `PRODQNT`: Production quantity
-- `EXPVAL`: Export value in EUR (fetched but typically not used - see Trade Data Priority)
-- `EXPQNT`: Export quantity (fetched but typically not used - see Trade Data Priority)
-- `IMPVAL`: Import value in EUR (fetched but typically not used - see Trade Data Priority)
-- `IMPQNT`: Import quantity (fetched but typically not used - see Trade Data Priority)
-- `QNTUNIT`: Unit of measurement (stored as string values)
+Both datasets are written to tables named `prodcom_ds_<dataset>_<year>` exactly as described in `docs/database-schema-raw.md`. Key columns include:
+- `prccode` / `prodcom_code_original` – PRODCOM code without/with dots.
+- `indicators` / `indicators_label` – Indicator codes such as `PRODVAL`, `PRODQNT`, `EXPVAL`, `EXPQNT`, `IMPVAL`, `IMPQNT`, `QNTUNIT`.
+- `decl` / `decl_label` – Declarant country code and label.
+- `value` – Stored as VARCHAR to handle numbers, units, and flags (e.g., `:c` for confidential).
+- Metadata timestamps (`update_data`, `timestamp_data`, etc.) for traceability.
 
-## COMEXT Data
+Indicator definitions:
+- `PRODVAL` – Production value (EUR)
+- `PRODQNT` – Production quantity (units vary; see `QNTUNIT`)
+- `EXPVAL`, `EXPQNT` – Export value/quantity
+- `IMPVAL`, `IMPQNT` – Import value/quantity
+- `QNTUNIT` – Unit label (KG, L, M3, etc.)
 
-### Dataset Used
+### 2.3 Usage notes
 
-- **DS-059341**: International trade of EU and non-EU countries since 2002 by HS2-4-6
-  - Contains detailed trade flows at 6-digit HS code level
-  - Time range: 2002-2023 (COMEXT data not available before 2002)
-  - Indicators: VALUE_EUR, QUANTITY_KG
+- PRODCOM trade indicators act as a fallback only when COMEXT has zeros for a product-year combination.
+- Confidentiality frequently suppresses `PRODQNT` at EU aggregates; the system logs empty responses but continues processing.
+- When fetching DS-056121:
+  ```julia
+  fetch_prodcom_data("2017-2023", ["ds-056121"])  # Only supplemental dataset
+  fetch_prodcom_data("2017-2023", ["ds-056120", "ds-056121"])  # Fetch both
+  ```
 
-### Data Fetching Approach
+## 3. COMEXT (Trade statistics)
 
-To manage API limitations and data volume:
+### 3.1 Dataset
 
-1. **Partner filtering**: 
-   - `INT_EU27_2020`: Intra-EU trade
-   - `EXT_EU27_2020`: Extra-EU trade
+- **DS-059341** – International trade for EU and partner countries since 2002, disaggregated by HS2/HS4/HS6 products. CirQuant requests HS6 records matching the product mapping table, filtered by partner grouping and flow type.
 
-2. **Flow types**:
-   - 1: Imports
-   - 2: Exports
+### 3.2 Raw schema alignment
 
-3. **Product filtering**: Uses 6-digit HS codes derived from the product mapping table
+Rows are stored in `comext_ds_059341_YYYY`. Important columns (see `docs/database-schema-raw.md` for the full list):
+- `product` – HS6 code without dots; `hs_code_query` retains the queried string.
+- `flow` / `flow_code` – `1` for imports, `2` for exports (with `flow_label` text).
+- `partner` / `partner_code` / `partner_label` – e.g., `INT_EU27_2020` (intra-EU) or `EXT_EU27_2020` (extra-EU).
+- `indicators` – `VALUE_EUR` or `QUANTITY_KG`.
+- `value` – Stored as VARCHAR because Eurostat may return scientific notation or placeholders.
+- `fetch_date` – Timestamp when the call was executed.
 
-## Circular Economy Data Sources (Forthcoming)
+### 3.3 Query strategy
 
-### Material Composition Data
+To manage rate limits and file sizes:
+1. **Partner split** – Separate calls for `INT_EU27_2020` and `EXT_EU27_2020`.
+2. **Flow split** – Imports (`flow=1`) and exports (`flow=2`).
+3. **Product filtering** – Only HS6 codes defined in `config/products.toml`.
+4. **Rate limiting** – 0.5s delay after successful calls, 1s after failures.
+5. **Error handling** – Failures are logged; fetch routines continue so a single outage does not halt the workflow.
 
-- **Dataset**: To be determined (not available through standard Eurostat API)
-- **Content**: Material breakdown (% by weight) for each product
-- **Structure**: Product × material × percentage, year-specific
-- **Sources being investigated**: 
-  - EU Ecodesign preparatory studies
-  - Product Environmental Footprint (PEF) databases
-  - LCA databases
+COMEXT is treated as the authoritative source for trade indicators; PRODCOM fallback logic only replaces zero values to avoid double counting.
 
-### Material Recycling Rates
+## 4. Complementary circular-economy data (planned)
 
-- **Dataset**: `env_wastrt` - Waste treatment statistics
-- **Content**: Recovery rates for each material type (steel, aluminum, copper, plastics, etc.)
-- **Time range**: Annual data
-- **Structure**: Material × country × recovery rate
+The following datasets extend the analysis but have not yet been loaded into the raw DuckDB. When implemented, they will follow the same naming pattern (`<dataset>_<year>`).
 
-### Product Collection Rates
+### 4.1 Waste collection statistics
 
-- **Datasets**:
-  - `env_waselee` - WEEE statistics for electronics
-  - `env_wasbat` - Battery waste statistics
-  - Others to be identified for remaining products
-- **Content**: Percentage of products collected for recycling
-- **Note**: Refurbishment rates largely unavailable in official statistics
+- **`env_waselee`** – WEEE data for electronic equipment.
+- **`env_wasbat`** – Battery waste statistics.
+- **Content** – Annual collection or recycling rates by product category and country.
+- **Use** – Provides `current_circularity_rate` values grounded in official statistics, replacing placeholder assumptions in the configuration.
 
-### Product Average Weights
+### 4.2 Waste treatment / recovery efficiency
 
-- **Source**: Calculated from existing PRODCOM data
-- **Method**: Total tonnes / total units for each product
-- **Purpose**: Replace hardcoded weight assumptions with data-driven values
+- **`env_wastrt`** – Waste treatment operations by material.
+- **Content** – Recovery rates for materials such as steel, aluminium, copper, plastics.
+- **Use** – Supplies material-specific recycling efficiencies for calculating recovered tonnes/euros in the processed database.
 
-## Products of Interest
+### 4.3 Material composition datasets
 
-The system focuses on specific product categories relevant to circular economy analysis:
+- **Sources under review** – Ecodesign preparatory studies, Product Environmental Footprint (PEF) datasets, commercial LCA databases.
+- **Content** – Product × material × mass share, potentially with year or technology differentiators.
+- **Use** – Enables weighted material recovery calculations in PRQL transformations.
 
-- Heat pumps and refrigeration equipment
-- Photovoltaic equipment  
-- ICT equipment (computers, servers, displays)
-- Batteries (Li-ion and other types)
+### 4.4 Derived average weights
 
-Products are mapped between PRODCOM codes (8-10 digits) and HS codes (6 digits) using the internal product conversion table.
+- **Method** – Compute `total_tonnes / total_units` using PRODCOM observations to populate `product_average_weights_YYYY`.
+- **Status** – Stored in the processed database; backfills missing `weight_kg` assumptions from the configuration.
 
-## Data Fetching Strategy
+## 5. Product scope and mappings
 
-### Trade Data Priority
-When processing trade data, the system prioritizes sources as follows:
-- **Primary source**: COMEXT data (DS-059341) for all import/export values and quantities
-- **Fallback source**: PRODCOM trade indicators (IMPVAL, EXPVAL, IMPQNT, EXPQNT) are only used when COMEXT data is unavailable for a specific product/year combination
+CirQuant currently focuses on:
+- Heat pumps & refrigeration equipment
+- Photovoltaic equipment
+- ICT hardware (phones, computers, monitors, storage, aggregate ICT categories)
+- Batteries (Li-ion and other chemistries)
 
-This approach ensures consistency in trade statistics and avoids potential discrepancies between the two data sources. COMEXT is preferred as it provides more comprehensive coverage of trade flows at the HS code level.
+Each product entry in `config/products.toml` lists PRODCOM and HS codes which feed the fetch routines. The mapping table constructed from this configuration ensures that PRODCOM (`prccode`) and HS (`product`) codes can be reconciled during transformation.
 
-### Rate Limiting
-Both APIs implement rate limiting. The system includes:
-- 0.5 second delay between successful API calls
-- 1.0 second delay after failed requests
+## 6. Fetching and processing strategy
 
-### Query Optimization
-- PRODCOM: One query per indicator, year, and product code
-- COMEXT: One query per indicator, partner, flow, year, and HS code
+### 6.1 Trade data priority
+- **Primary** – COMEXT (`VALUE_EUR`, `QUANTITY_KG`) for imports/exports.
+- **Fallback** – PRODCOM indicators only when COMEXT delivers `0` or missing values for the same product-year. Replacement happens during the harmonisation phase when building `production_trade_harmonized_YYYY` and `production_trade_YYYY`.
 
-### Error Handling
-- Failed queries are logged but don't stop the entire process
-- Backup CSV files are created if database writes fail
-- Empty results are expected for some product/year combinations
+### 6.2 Performance safeguards
+- **Rate limiting** – 0.5 s delay after success, 1 s after failure (both APIs).
+- **Query batching** – PRODCOM: one call per indicator-year-product; COMEXT: one call per HS6-year-flow-partner set.
+- **Error logging** – Failures are recorded; processing continues with partial data if necessary.
+- **Fallback storage** – If DuckDB writes fail, CSV backups are generated so no fetch is lost.
 
-### Fetching Non-Default Datasets
+### 6.3 Handling non-default datasets
+Use the `custom_datasets` argument when calling `fetch_prodcom_data` to include DS-056121 or other PRODCOM datasets. This keeps the default workflow lightweight while still supporting targeted research.
 
-To fetch DS-056121 (which is not included by default), use the `custom_datasets` parameter:
+## 7. Known issues and coverage gaps
 
-```julia
-# Fetch only DS-056121
-fetch_prodcom_data("2017-2023", ["ds-056121"])
+1. **Confidentiality** – DS-056121 and certain PRODCOM indicators return empty results for EU aggregates or small countries. Expect gaps and rely on COMEXT/other sources when possible.
+2. **Trade gaps** – Some HS codes lack trade entries in early years or for specific partner combinations. Logged as empty results; analysts may need to cross-check or adjust mapping codes.
+3. **Unit heterogeneity** – `QNTUNIT` varies widely; downstream conversion scripts must handle litres, pieces, square metres, etc.
+4. **Historical limits** – PRODCOM extends to 1995, but COMEXT starts in 2002, constraining the overlap period available for joint analyses.
 
-# Fetch both DS-056120 and DS-056121
-fetch_prodcom_data("2017-2023", ["ds-056120", "ds-056121"])
-```
+## 8. Database storage recap
 
-Note: DS-056121 often returns empty results due to confidentiality restrictions on EU aggregate production quantities.
+The raw DuckDB mirrors Eurostat responses (see `docs/database-schema-raw.md`). Table names and columns match those described above, ensuring:
+- **Traceability** – metadata columns (`fetch_date`, timestamps, original codes) track every API call.
+- **Consistency** – one table per dataset-year combination.
+- **Extensibility** – future sources (waste statistics, material composition) will adopt the same naming convention so documentation remains valid.
 
-## Known Issues and Limitations
-
-1. **DS-056121 Not Fetched by Default**: This dataset is only queried when explicitly requested via `custom_datasets` parameter. Even when fetched, EU aggregate production quantities are often not published due to:
-   - Statistical confidentiality rules
-   - Insufficient country coverage
-   - Data quality thresholds
-
-2. **Missing Trade Data**: Some HS codes may have no trade data for specific:
-   - Years (especially early years)
-   - Partner combinations
-   - Flow directions
-
-3. **Unit Conversions**: QNTUNIT values vary by product and must be handled during analysis
-
-4. **Historical Coverage**: 
-   - PRODCOM: Available from 1995
-   - COMEXT: Only available from 2002
-
-## Database Storage
-
-### Raw Database
-All fetched data is stored in DuckDB tables following Eurostat dataset naming:
-- PRODCOM: `prodcom_ds_XXXXXX_YYYY` (where XXXXXX is dataset ID, YYYY is year)
-- COMEXT: `comext_ds_XXXXXX_YYYY`
-- Waste statistics: `env_waselee_YYYY`, `env_wasbat_YYYY`, `env_wastrt_YYYY` (when implemented)
-- Material composition: Dataset ID to be determined
-
-### Processed Database
-Calculated and transformed data with meaningful names:
-- `product_material_composition_YYYY` - Material breakdown by product
-- `material_recycling_rates_YYYY` - Recovery rates by material
-- `product_average_weights_YYYY` - Calculated from PRODCOM
-- `product_collection_rates_YYYY` - From waste statistics
-- `circularity_indicators_by_strategy_YYYY` - Final analysis results
-
-Value columns in raw tables are stored as strings to accommodate both numeric values and unit indicators.
+Processed tables (e.g., `product_material_composition_YYYY`, `material_recycling_rates_YYYY`, `product_collection_rates_YYYY`, `product_average_weights_YYYY`, `circularity_indicators_by_strategy_YYYY`) build on these inputs and are described in `docs/database-schema-processed.md`.
