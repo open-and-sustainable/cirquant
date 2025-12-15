@@ -478,10 +478,10 @@ uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 version = "1.11.0"
 
 [[deps.ProdcomAPI]]
-deps = ["DataFrames", "Dates", "Documenter", "HTTP", "JSON3"]
-git-tree-sha1 = "29aa916a9c9892f1482e27dd25dfb6a05f4055ba"
+deps = ["CSV", "DataFrames", "Dates", "Documenter", "Downloads", "HTTP", "JSON3", "ZipFile"]
+git-tree-sha1 = "882802bbc7219c168f1cb60e263900e26bf5c920"
 uuid = "9d65e14e-968e-48dd-a841-4128c2721e1d"
-version = "0.0.7"
+version = "0.0.8"
 
 [[deps.REPL]]
 deps = ["InteractiveUtils", "JuliaSyntaxHighlighting", "Markdown", "Sockets", "StyledStrings", "Unicode"]
