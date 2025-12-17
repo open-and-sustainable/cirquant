@@ -4,14 +4,25 @@ The purpose of this guide is to describe every configurable or derived parameter
 
 ## 1. Configuration structure
 
-All research assumptions live in a single TOML file. Each product has one block with metadata and a nested `parameters` table:
+All research assumptions live in a single TOML file. Each product has one block with metadata, a nested `prodcom_codes` table keyed by nomenclature epoch, and a `parameters` table:
 
 ```toml
+[prodcom_epochs.legacy]
+start_year = 1995
+end_year = 2007
+
+[prodcom_epochs.nace_rev2]
+start_year = 2008
+end_year = 2100
+
 [products.product_key]
 id = 1
 name = "Heat pumps"
-prodcom_codes = ["28.21.13.30"]
 hs_codes = ["8418.69"]
+
+[products.product_key.prodcom_codes]
+legacy = ["28.21.13.30"]
+nace_rev2 = ["28.25.13.80"]
 
 [products.product_key.parameters]
 weight_kg = 100.0
@@ -23,7 +34,7 @@ potential_circularity_rate = 45.0
 ### 1.1 Product block
 - `id` *(Int)* – Numeric identifier used for ordering; must be unique.
 - `name` *(String)* – Human-readable label shown in outputs.
-- `prodcom_codes` *(Array{String})* – One or more PRODCOM codes, written with dots as published.
+- `prodcom_codes` *(Table of Array{String})* – Codes grouped by PRODCOM epoch (e.g., `legacy`, `nace_rev2`). Each entry lists dot-formatted codes valid for that time span.
 - `hs_codes` *(Array{String})* – One or more HS6 codes, dot-separated for readability.
 
 ### 1.2 Parameters block
@@ -56,7 +67,8 @@ Only the first row is edited manually; the rest are fetched or calculated and wr
 - **`name`**: Appears in dashboards and exports.
 
 ### 3.2 Code mappings
-- **`prodcom_codes`**: Accepts full codes (`28.21.13.30`) or aggregate sections (`26.20`). Multiple codes allow grouping related products.
+- **`prodcom_epochs.*`**: Optional top-level table defining the start/end year for each nomenclature epoch. Defaults cover the legacy (≤2007) and NACE Rev.2 (2008+) lists.
+- **`prodcom_codes`**: Nested table within each product. Keys must match an epoch defined above and values are arrays of full codes (`28.21.13.30`). Multiple codes per epoch allow grouping related items.
 - **`hs_codes`**: Provide the trade codes needed to fetch COMEXT data. List every HS6 relevant to the product.
 
 ### 3.3 Physical parameters
@@ -69,7 +81,7 @@ Only the first row is edited manually; the rest are fetched or calculated and wr
 
 ## 4. Runtime handling
 
-1. `validate_product_config()` checks schema compliance (required fields, numeric ranges, unique IDs).
+1. `validate_product_config()` checks schema compliance (required fields, numeric ranges, unique IDs, epoch definitions).
 2. The configuration is loaded into the `ANALYSIS_PARAMETERS` structure at package initialisation.
 3. During processing, parameter rows are written to `parameters_circularity_rate` (and `parameters_recovery_efficiency` if material-level data exists) in the processed DuckDB so downstream steps can join on them.
 4. PRQL scripts use these tables to compute refurbishment/recycling savings, e.g.:
@@ -99,7 +111,7 @@ When composition or collection data is missing, the system can still run but rec
 
 - Keep refurbishment + recycling narratives consistent. Document assumptions in Git commits or inline comments.
 - Ensure all products referenced in analysis scripts exist in `products.toml`.
-- Update mapping codes whenever Eurostat revises PRODCOM/HS classifications.
+- Update mapping codes whenever Eurostat revises PRODCOM/HS classifications, and add new epochs if year ranges change.
 - Rerun `validate_product_config()` after every edit; CI jobs depend on it.
 - Store evidence for potential rates (studies, policy targets) in project notes or docstrings for auditability.
 

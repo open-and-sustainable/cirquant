@@ -21,10 +21,215 @@ using TOML
 using DuckDB, DBInterface
 using ..DatabaseAccess
 
-export load_analysis_parameters, load_product_mappings, validate_product_config
+export load_analysis_parameters, load_product_mappings, validate_product_config, prodcom_codes_for_year
 
 # Path to the products configuration file
 const PRODUCTS_CONFIG_PATH = joinpath(@__DIR__, "..", "..", "config", "products.toml")
+const DEFAULT_PRODCOM_EPOCHS = Dict(
+    "legacy" => (
+        label = "Legacy PRODCOM (NACE Rev. 1.1)",
+        start_year = 1995,
+        end_year = 2007,
+        description = "Codes used before the 2008 Prodcom revision."
+    ),
+    "nace_rev2" => (
+        label = "PRODCOM List 2008+ (NACE Rev. 2)",
+        start_year = 2008,
+        end_year = 2100,
+        description = "Codes introduced with the 2008 Prodcom list."
+    )
+)
+
+"""
+    _load_products_config(config_path)
+
+Internal helper to parse the products configuration file.
+"""
+function _load_products_config(config_path::String)
+    return TOML.parsefile(config_path)
+end
+
+"""
+    _get_prodcom_epochs(config)
+
+Return a dictionary mapping epoch keys to metadata named tuples.
+Falls back to DEFAULT_PRODCOM_EPOCHS when the config does not define epochs.
+"""
+function _get_prodcom_epochs(config::Dict)
+    epochs_config = get(config, "prodcom_epochs", nothing)
+    if epochs_config === nothing
+        return DEFAULT_PRODCOM_EPOCHS
+    end
+
+    epoch_map = Dict{String,NamedTuple}()
+    for (epoch_key, epoch_data) in epochs_config
+        start_year = get(epoch_data, "start_year", nothing)
+        end_year = get(epoch_data, "end_year", nothing)
+        if start_year === nothing || end_year === nothing
+            @warn "Epoch '$epoch_key' is missing start_year/end_year; skipping and using defaults"
+            continue
+        end
+
+        epoch_map[string(epoch_key)] = (
+            label = get(epoch_data, "label", string(epoch_key)),
+            start_year = Int(start_year),
+            end_year = Int(end_year),
+            description = get(epoch_data, "description", "")
+        )
+    end
+
+    return isempty(epoch_map) ? DEFAULT_PRODCOM_EPOCHS : epoch_map
+end
+
+"""
+    _normalize_code_list(entry)
+
+Ensures the entry is returned as a vector of trimmed String codes.
+"""
+function _normalize_code_list(entry)
+    if entry isa String
+        return [strip(String(entry))]
+    elseif entry isa Vector
+        return [strip(String(code)) for code in entry if !isempty(strip(String(code)))]
+    else
+        error("Invalid PRODCOM code entry: expected String or Vector, got $(typeof(entry))")
+    end
+end
+
+"""
+    _collect_prodcom_code_sets(product_data)
+
+Return a dictionary mapping epoch keys to arrays of PRODCOM codes.
+Supports both legacy array syntax and the new epoch-aware tables.
+"""
+function _collect_prodcom_code_sets(product_data::Dict)
+    prodcom_entry = product_data["prodcom_codes"]
+    code_sets = Dict{String,Vector{String}}()
+
+    if prodcom_entry isa Dict
+        for (epoch_key, codes) in prodcom_entry
+            code_sets[string(epoch_key)] = _normalize_code_list(codes)
+        end
+    elseif prodcom_entry isa Vector
+        # Backwards compatibility: treat as legacy epoch
+        code_sets["legacy"] = _normalize_code_list(prodcom_entry)
+    else
+        error("prodcom_codes must be a table of epochs or an array of strings")
+    end
+
+    return code_sets
+end
+
+"""
+    _ordered_epoch_keys(epoch_map)
+
+Return epoch keys sorted by their start_year (ascending).
+"""
+function _ordered_epoch_keys(epoch_map::Dict{String,NamedTuple})
+    return sort(collect(keys(epoch_map)); by = key -> epoch_map[key].start_year)
+end
+
+"""
+    _select_epoch_for_year(year, epoch_map)
+
+Return the epoch key that covers the requested year.
+"""
+function _select_epoch_for_year(year::Int, epoch_map::Dict{String,NamedTuple})
+    ordered = _ordered_epoch_keys(epoch_map)
+    for epoch_key in ordered
+        info = epoch_map[epoch_key]
+        if info.start_year <= year <= info.end_year
+            return epoch_key
+        end
+    end
+    return nothing
+end
+
+"""
+    _select_fallback_codes(code_sets, epochs, year, ordered_epochs)
+
+Choose the best available code set when a product does not define codes for the requested epoch.
+"""
+function _select_fallback_codes(code_sets::Dict{String,Vector{String}},
+                                epochs::Dict{String,NamedTuple},
+                                year::Int,
+                                ordered_epochs::Vector{String})
+    # Prefer epochs that cover the requested year even if they are different keys
+    for epoch_key in ordered_epochs
+        if haskey(code_sets, epoch_key)
+            epoch_info = get(epochs, epoch_key, nothing)
+            if epoch_info !== nothing && epoch_info.start_year <= year <= epoch_info.end_year
+                return code_sets[epoch_key]
+            end
+        end
+    end
+
+    # Otherwise return the last available epoch definition
+    for epoch_key in reverse(ordered_epochs)
+        if haskey(code_sets, epoch_key)
+            return code_sets[epoch_key]
+        end
+    end
+
+    return nothing
+end
+
+"""
+    prodcom_codes_for_year(year::Int; config_path::String = PRODUCTS_CONFIG_PATH)
+
+Return the PRODCOM codes (with and without dots) that should be used for the requested year.
+
+# Returns
+- NamedTuple with:
+  - `epoch_key`: Selected epoch key
+  - `epoch_info`: Metadata about the epoch
+  - `codes_clean`: Vector of codes without dots
+  - `codes_original`: Vector of codes as written in the config
+  - `clean_to_original`: Dict mapping cleaned codes to the original representation
+  - `clean_to_product`: Dict mapping cleaned codes to `(product_id, product_name)`
+"""
+function prodcom_codes_for_year(year::Int; config_path::String = PRODUCTS_CONFIG_PATH)
+    config = _load_products_config(config_path)
+    epochs = _get_prodcom_epochs(config)
+    ordered_epochs = _ordered_epoch_keys(epochs)
+
+    epoch_key = _select_epoch_for_year(year, epochs)
+    if epoch_key === nothing
+        error("No PRODCOM epoch covers year $year; please update prodcom_epochs in products.toml")
+    end
+
+    products = get(config, "products", Dict())
+    codes_clean = String[]
+    codes_original = String[]
+    clean_to_original = Dict{String,String}()
+    clean_to_product = Dict{String,Tuple{Int,String}}()
+
+    for (_, product_data) in products
+        code_sets = _collect_prodcom_code_sets(product_data)
+        selected_codes = get(code_sets, epoch_key, nothing)
+        if selected_codes === nothing
+            selected_codes = _select_fallback_codes(code_sets, epochs, year, ordered_epochs)
+        end
+        selected_codes === nothing && continue
+
+        for code in selected_codes
+            clean_code = replace(code, "." => "")
+            push!(codes_clean, clean_code)
+            push!(codes_original, code)
+            clean_to_original[clean_code] = code
+            clean_to_product[clean_code] = (product_data["id"], product_data["name"])
+        end
+    end
+
+    return (
+        epoch_key = epoch_key,
+        epoch_info = epochs[epoch_key],
+        codes_clean = unique(codes_clean),
+        codes_original = unique(codes_original),
+        clean_to_original = clean_to_original,
+        clean_to_product = clean_to_product
+    )
+end
 
 """
     load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
@@ -60,10 +265,10 @@ function load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
 
     # Process each product
     for (key, product_data) in products
-        # Get PRODCOM codes and remove dots
-        prodcom_codes = product_data["prodcom_codes"]
+        code_sets = _collect_prodcom_code_sets(product_data)
+        flattened_codes = unique(vcat(values(code_sets)...))
 
-        for prodcom_code in prodcom_codes
+        for prodcom_code in flattened_codes
             # Remove dots from PRODCOM code
             clean_code = replace(prodcom_code, "." => "")
 
@@ -101,8 +306,12 @@ Load product mapping data from the products.toml configuration file.
 - `DataFrame`: Product mapping data with columns:
   - product_id: Unique identifier for each product
   - product: Human-readable product name
-  - prodcom_code: PRODCOM classification code
+  - prodcom_code: PRODCOM classification code (with dots)
+  - prodcom_code_clean: PRODCOM code stripped of dots
   - hs_codes: Harmonized System codes (comma-separated if multiple)
+  - prodcom_epoch: Epoch key (e.g. `legacy`, `nace_rev2`)
+  - epoch_label: Human-readable label for the epoch
+  - epoch_start_year / epoch_end_year: Year coverage for the epoch
 
 # Example
 ```julia
@@ -110,46 +319,66 @@ mapping_df = load_product_mappings()
 ```
 """
 function load_product_mappings(config_path::String = PRODUCTS_CONFIG_PATH)
-    # Read the TOML file
-    config = TOML.parsefile(config_path)
+    config = _load_products_config(config_path)
+    epochs = _get_prodcom_epochs(config)
+    ordered_epochs = _ordered_epoch_keys(epochs)
 
     # Initialize vectors for DataFrame columns
     product_ids = Int[]
     product_names = String[]
     prodcom_codes_list = String[]
+    prodcom_codes_clean = String[]
     hs_codes_list = String[]
+    epoch_keys = String[]
+    epoch_labels = String[]
+    epoch_start_years = Int[]
+    epoch_end_years = Int[]
 
-    # Extract products section
     products = get(config, "products", Dict())
+    for (_, product_data) in products
+        product_id = product_data["id"]
+        product_name = product_data["name"]
+        hs_code_str = join(product_data["hs_codes"], ",")
+        code_sets = _collect_prodcom_code_sets(product_data)
 
-    # Iterate through each product
-    for (key, product_data) in products
-        # Extract basic information
-        push!(product_ids, product_data["id"])
-        push!(product_names, product_data["name"])
+        for epoch_key in ordered_epochs
+            codes = get(code_sets, epoch_key, nothing)
+            codes === nothing && continue
 
-        # Handle PRODCOM codes - take the first (and currently only) code
-        prodcom_codes = product_data["prodcom_codes"]
-        prodcom_code_str = prodcom_codes[1]  # Each product has exactly one PRODCOM code
-        push!(prodcom_codes_list, prodcom_code_str)
+            epoch_info = get(epochs, epoch_key, (
+                label = epoch_key,
+                start_year = missing,
+                end_year = missing,
+                description = ""
+            ))
 
-        # Handle HS codes - join multiple codes with commas
-        hs_codes = product_data["hs_codes"]
-        hs_code_str = join(hs_codes, ",")
-        push!(hs_codes_list, hs_code_str)
+            for prodcom_code in codes
+                push!(product_ids, product_id)
+                push!(product_names, product_name)
+                push!(prodcom_codes_list, prodcom_code)
+                push!(prodcom_codes_clean, replace(prodcom_code, "." => ""))
+                push!(hs_codes_list, hs_code_str)
+                push!(epoch_keys, epoch_key)
+                push!(epoch_labels, epoch_info.label)
+                push!(epoch_start_years, epoch_info.start_year)
+                push!(epoch_end_years, epoch_info.end_year)
+            end
+        end
     end
 
-    # Create DataFrame
     mapping_df = DataFrame(
         product_id = product_ids,
         product = product_names,
         prodcom_code = prodcom_codes_list,
-        hs_codes = hs_codes_list
+        prodcom_code_clean = prodcom_codes_clean,
+        hs_codes = hs_codes_list,
+        prodcom_epoch = epoch_keys,
+        epoch_label = epoch_labels,
+        epoch_start_year = epoch_start_years,
+        epoch_end_year = epoch_end_years
     )
 
-    # Sort by product_id to ensure consistent ordering
-    sort!(mapping_df, :product_id)
-
+    sort!(mapping_df, [:product_id, :prodcom_epoch, :prodcom_code])
     return mapping_df
 end
 
@@ -199,7 +428,6 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
 
     # Track seen IDs to check for duplicates
     seen_ids = Set{Int}()
-    seen_prodcom_codes = Set{String}()
 
     # Required fields for each product
     required_product_fields = ["id", "name", "prodcom_codes", "hs_codes", "parameters"]
@@ -239,25 +467,29 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
         end
 
         # Validate PRODCOM codes
-        prodcom_codes = product_data["prodcom_codes"]
-        if !(prodcom_codes isa Vector)
-            push!(errors, "Product '$product_key' prodcom_codes must be an array")
+        code_sets = Dict{String,Vector{String}}()
+        try
+            code_sets = _collect_prodcom_code_sets(product_data)
+        catch e
+            push!(errors, "Product '$product_key' has invalid prodcom_codes format: $e")
             is_valid = false
-        elseif isempty(prodcom_codes)
-            push!(errors, "Product '$product_key' has empty prodcom_codes array")
+        end
+
+        if isempty(code_sets)
+            push!(errors, "Product '$product_key' must specify at least one PRODCOM code")
             is_valid = false
         else
-            for code in prodcom_codes
-                if !(code isa String) || isempty(code)
-                    push!(errors, "Product '$product_key' has invalid PRODCOM code: $code")
+            for (epoch_key, codes) in code_sets
+                if isempty(codes)
+                    push!(errors, "Product '$product_key' epoch '$epoch_key' must include at least one PRODCOM code")
                     is_valid = false
                 end
-                # Check for duplicate PRODCOM codes across products
-                clean_code = replace(code, "." => "")
-                if clean_code in seen_prodcom_codes
-                    push!(warnings, "PRODCOM code '$code' appears in multiple products")
-                else
-                    push!(seen_prodcom_codes, clean_code)
+
+                for code in codes
+                    if !(code isa AbstractString) || isempty(strip(String(code)))
+                        push!(errors, "Product '$product_key' epoch '$epoch_key' has invalid PRODCOM code: '$code'")
+                        is_valid = false
+                    end
                 end
             end
         end

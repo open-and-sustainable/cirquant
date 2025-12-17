@@ -1,11 +1,26 @@
 # CirQuant Product Configuration
 # All product definitions and parameters in one place
 
+[prodcom_epochs.legacy]
+label = "Legacy PRODCOM (NACE Rev. 1.1)"
+start_year = 1995
+end_year = 2007
+description = "Codes used in Eurostat PRODCOM releases before the 2008 nomenclature reboot."
+
+[prodcom_epochs.nace_rev2]
+label = "PRODCOM List 2008+ (NACE Rev. 2)"
+start_year = 2008
+end_year = 2100
+description = "Codes used in the 2008 and later PRODCOM/EuroProMS datasets."
+
 [products.heat_pumps]
 id = 1
 name = "Heat pumps"
-prodcom_codes = ["28.21.13.30"]
 hs_codes = ["8418.69"]
+
+[products.heat_pumps.prodcom_codes]
+legacy = ["28.21.13.30"]
+nace_rev2 = ["28.25.13.80"]
 
 [products.heat_pumps.parameters]
 weight_kg = 100.0
@@ -16,8 +31,11 @@ potential_circularity_rate = 45.0
 [products.pv_panels]
 id = 2
 name = "PV panels"
-prodcom_codes = ["27.11.40.00"]
 hs_codes = ["8541.43"]
+
+[products.pv_panels.prodcom_codes]
+legacy = ["27.11.40.00"]
+nace_rev2 = ["26.11.22.40"]
 
 [products.pv_panels.parameters]
 weight_kg = 20.0
@@ -28,8 +46,11 @@ potential_circularity_rate = 65.0
 [products.printers]
 id = 3
 name = "Printers"
-prodcom_codes = ["26.20.12.30"]
 hs_codes = ["8443.31"]
+
+[products.printers.prodcom_codes]
+legacy = ["26.20.12.30"]
+nace_rev2 = ["26.20.18.00"]
 
 [products.printers.parameters]
 weight_kg = 15.0
@@ -40,8 +61,11 @@ potential_circularity_rate = 40.0
 [products.smartphones]
 id = 4
 name = "ICT - Smartphones"
-prodcom_codes = ["26.20.11.30"]
 hs_codes = ["8517.13"]
+
+[products.smartphones.prodcom_codes]
+legacy = ["26.20.11.30"]
+nace_rev2 = ["26.30.22.00"]
 
 [products.smartphones.parameters]
 weight_kg = 0.2
@@ -52,8 +76,11 @@ potential_circularity_rate = 35.0
 [products.other_phones]
 id = 5
 name = "ICT - Other phones"
-prodcom_codes = ["26.20.11.50"]
 hs_codes = ["8517.14"]
+
+[products.other_phones.prodcom_codes]
+legacy = ["26.20.11.50"]
+nace_rev2 = ["26.30.22.00"]
 
 [products.other_phones.parameters]
 weight_kg = 0.3
@@ -64,8 +91,11 @@ potential_circularity_rate = 30.0
 [products.portable_computers]
 id = 6
 name = "ICT - Portable computers"
-prodcom_codes = ["26.20.13.00"]
 hs_codes = ["8471.30"]
+
+[products.portable_computers.prodcom_codes]
+legacy = ["26.20.13.00"]
+nace_rev2 = ["26.20.11.00"]
 
 [products.portable_computers.parameters]
 weight_kg = 2.0
@@ -76,8 +106,11 @@ potential_circularity_rate = 45.0
 [products.other_computers]
 id = 7
 name = "ICT - Other computers"
-prodcom_codes = ["26.20.14.00"]
 hs_codes = ["8471.41", "8471.49"]
+
+[products.other_computers.prodcom_codes]
+legacy = ["26.20.14.00"]
+nace_rev2 = ["26.20.13.00", "26.20.14.00"]
 
 [products.other_computers.parameters]
 weight_kg = 8.0
@@ -88,8 +121,11 @@ potential_circularity_rate = 45.0
 [products.monitors_io]
 id = 8
 name = "ICT - Monitors, I/O units"
-prodcom_codes = ["26.20.16.00"]
 hs_codes = ["8528.52", "8471.60"]
+
+[products.monitors_io.prodcom_codes]
+legacy = ["26.20.16.00"]
+nace_rev2 = ["26.20.17.00", "26.20.16.50", "26.20.16.60"]
 
 [products.monitors_io.parameters]
 weight_kg = 5.0
@@ -100,8 +136,11 @@ potential_circularity_rate = 50.0
 [products.storage_units]
 id = 9
 name = "ICT - Storage units"
-prodcom_codes = ["26.20.17.00"]
 hs_codes = ["8471.70"]
+
+[products.storage_units.prodcom_codes]
+legacy = ["26.20.17.00"]
+nace_rev2 = ["26.20.21.00"]
 
 [products.storage_units.parameters]
 weight_kg = 1.0
@@ -112,8 +151,11 @@ potential_circularity_rate = 40.0
 [products.other_ict_units]
 id = 10
 name = "ICT - Other units"
-prodcom_codes = ["26.20.18.00"]
 hs_codes = ["8471.80"]
+
+[products.other_ict_units.prodcom_codes]
+legacy = ["26.20.18.00"]
+nace_rev2 = ["26.20.30.00"]
 
 [products.other_ict_units.parameters]
 weight_kg = 3.0
@@ -124,8 +166,11 @@ potential_circularity_rate = 35.0
 [products.full_ict]
 id = 11
 name = "Full ICT (PRODCOM 26.20)"
-prodcom_codes = ["26.20"]
 hs_codes = ["8517.13", "8517.14", "8471.30", "8471.41", "8471.49", "8528.52", "8471.60", "8471.70", "8471.80"]
+
+[products.full_ict.prodcom_codes]
+legacy = ["26.20"]
+nace_rev2 = ["26.20"]
 
 [products.full_ict.parameters]
 weight_kg = 5.0
@@ -136,8 +181,11 @@ potential_circularity_rate = 40.0
 [products.batteries_li_ion]
 id = 12
 name = "Batteries - Li-ion"
-prodcom_codes = ["27.20.23.00"]
 hs_codes = ["8507.60"]
+
+[products.batteries_li_ion.prodcom_codes]
+legacy = ["27.20.23.00"]
+nace_rev2 = ["27.20.23.00"]
 
 [products.batteries_li_ion.parameters]
 weight_kg = 0.5
@@ -148,8 +196,11 @@ potential_circularity_rate = 70.0
 [products.batteries_other]
 id = 13
 name = "Batteries - Other"
-prodcom_codes = ["27.20.24.00"]
 hs_codes = ["8507.10", "8507.20", "8507.50", "8507.80"]
+
+[products.batteries_other.prodcom_codes]
+legacy = ["27.20.24.00"]
+nace_rev2 = ["27.20.21.00", "27.20.22.10", "27.20.22.50", "27.20.23.00"]
 
 [products.batteries_other.parameters]
 weight_kg = 1.0

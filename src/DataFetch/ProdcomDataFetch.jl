@@ -2,7 +2,7 @@ module ProdcomDataFetch
 
 using DataFrames, Dates, DuckDB, CSV, ComextAPI, ProdcomAPI
 using ..DatabaseAccess: write_large_duckdb_table!, recreate_duckdb_database
-using ..AnalysisConfigLoader: load_product_mappings
+using ..AnalysisConfigLoader: prodcom_codes_for_year
 
 export fetch_prodcom_data
 
@@ -40,6 +40,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
         "ds-056120" => ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT", "QNTUNIT"],
         "ds-056121" => ["PRODQNT", "QNTUNIT"]
     )
+    default_indicators = ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT"]
 
     @info "Using database path: $db_path"
 
@@ -89,105 +90,70 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
     end
 
     # Process each dataset and year
+    current_epoch_key = nothing
+
     for dataset in datasets
         @info "Processing dataset: $dataset"
+        indicators = get(dataset_indicators, dataset, default_indicators)
 
         for year in start_year:end_year
             @info "Fetching data for year: $year"
+            code_info = prodcom_codes_for_year(year)
+            prodcom_code_set = Set(code_info.codes_clean)
+            prodcom_code_map = code_info.clean_to_original
+
+            if isempty(prodcom_code_set)
+                @warn "No PRODCOM codes defined for year $year; skipping"
+                continue
+            end
+
+            if current_epoch_key != code_info.epoch_key
+                current_epoch_key = code_info.epoch_key
+                epoch_range = "$(code_info.epoch_info.start_year)-$(code_info.epoch_info.end_year)"
+                @info "Using PRODCOM nomenclature epoch '$(code_info.epoch_info.label)' ($epoch_range)"
+            end
+
+            @info "Focusing on $(length(prodcom_code_set)) PRODCOM codes for year $year"
+            stats[:total_queries] += 1
 
             try
                 # Use ProdcomAPI with indicator filters
                 # Initialize combined_df outside to ensure proper scope
                 combined_df = DataFrame()
+                @info "Fetching $dataset for year $year with indicators: $indicators (bulk source)"
 
-                if haskey(dataset_indicators, dataset)
-                    indicators = dataset_indicators[dataset]
-                    @info "Fetching $dataset for year $year with indicators: $indicators"
+                for indicator in indicators
+                    try
+                        indicator_df = ProdcomAPI.fetch_prodcom_data(dataset, year, indicator;
+                                                                    verbose=false, source=:bulk)
 
-                    # Get PRODCOM codes from AnalysisConfigLoader
-                    product_mapping = load_product_mappings()
-                    prodcom_codes = unique(product_mapping.prodcom_code)
-
-                    # Remove dots from PRODCOM codes for API submission
-                    prodcom_codes_no_dots = [replace(code, "." => "") for code in prodcom_codes]
-
-                    @info "Focusing on $(length(prodcom_codes_no_dots)) PRODCOM codes from sectors of interest"
-
-                    # Fetch each indicator and PRODCOM code combination
-                    for indicator in indicators
-                        for (idx, prccode) in enumerate(prodcom_codes_no_dots)
-                            @info "Fetching $dataset for year $year, indicator: $indicator, PRODCOM: $prccode ($(prodcom_codes[idx]))"
-                            stats[:total_queries] += 1
-                            indicator_df = ProdcomAPI.fetch_prodcom_data(dataset, year, indicator; prccode=prccode, verbose=false)
-
-                            # Add delay to avoid rate limiting
-                            sleep(5)  # 5 seconds delay between API calls
-
-                            if !isnothing(indicator_df) && nrow(indicator_df) > 0
-                                # Add original PRODCOM code with dots for reference
-                                indicator_df[!, :prodcom_code_original] .= prodcom_codes[idx]
-
-                                # Convert value column to string to accommodate both numeric and QNTUNIT string data
-                                if hasproperty(indicator_df, :value)
-                                    indicator_df[!, :value] = string.(indicator_df.value)
-                                end
-
-                                if nrow(combined_df) == 0
-                                    combined_df = indicator_df
-                                else
-                                    # Combine dataframes, avoiding duplicates
-                                    combined_df = vcat(combined_df, indicator_df, cols=:union)
-                                end
-                            end
+                        if isnothing(indicator_df) || nrow(indicator_df) == 0
+                            @warn "No data returned for $dataset, year $year, indicator $indicator"
+                            continue
                         end
-                    end
-                else
-                    # Get PRODCOM codes from AnalysisConfigLoader
-                    product_mapping = load_product_mappings()
-                    prodcom_codes = unique(product_mapping.prodcom_code)
 
-                    # Remove dots from PRODCOM codes for API submission
-                    prodcom_codes_no_dots = [replace(code, "." => "") for code in prodcom_codes]
+                        indicator_df[!, :prccode] = string.(indicator_df.prccode)
+                        mask = in.(indicator_df.prccode, Ref(prodcom_code_set))
+                        filtered_df = indicator_df[mask, :]
 
-                    @info "Focusing on $(length(prodcom_codes_no_dots)) PRODCOM codes from sectors of interest"
-
-                    # Fetch data for each PRODCOM code
-                    for (idx, prccode) in enumerate(prodcom_codes_no_dots)
-                        @info "Fetching $dataset for year $year, PRODCOM: $prccode ($(prodcom_codes[idx]))"
-                        # When no specific indicators are requested, we fetch all indicators for the PRODCOM code
-                        # We'll use the standard indicators that are typically available
-                        for indicator in ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT"]
-                            try
-                                indicator_df = ProdcomAPI.fetch_prodcom_data(dataset, year, indicator; prccode=prccode, verbose=false)
-
-                                # Add delay to avoid rate limiting
-                                sleep(5)  # 5 seconds delay between API calls
-
-                                if !isnothing(indicator_df) && nrow(indicator_df) > 0
-                                    # Add original PRODCOM code with dots for reference
-                                    indicator_df[!, :prodcom_code_original] .= prodcom_codes[idx]
-
-                                    # Convert value column to string to accommodate both numeric and QNTUNIT string data
-                                    if hasproperty(indicator_df, :value)
-                                        indicator_df[!, :value] = string.(indicator_df.value)
-                                    end
-
-                                    if nrow(combined_df) == 0
-                                        combined_df = indicator_df
-                                    else
-                                        # Combine dataframes, avoiding duplicates
-                                        combined_df = vcat(combined_df, indicator_df, cols=:union)
-                                    end
-                                end
-                            catch e
-                                # Some indicators might not be available for all datasets
-                                @debug "Indicator $indicator not available for $dataset: $e"
-                                stats[:failed] += 1
-
-                                # Add delay even on failure to avoid rate limiting
-                                sleep(10)  # 10 seconds delay after failed requests
-                            end
+                        if nrow(filtered_df) == 0
+                            @info "No matching PRODCOM codes found for indicator $indicator"
+                            continue
                         end
+
+                        filtered_df[!, :prodcom_code_original] = [prodcom_code_map[code] for code in filtered_df.prccode]
+
+                        if :value in propertynames(filtered_df)
+                            filtered_df[!, :value] = string.(filtered_df.value)
+                        end
+
+                        if nrow(combined_df) == 0
+                            combined_df = filtered_df
+                        else
+                            combined_df = vcat(combined_df, filtered_df, cols=:union)
+                        end
+                    catch e
+                        @warn "Failed to fetch indicator $indicator for $dataset, year $year" exception = e
                     end
                 end
 
@@ -285,9 +251,6 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                 @info "Continuing with next year/dataset to avoid losing progress"
                 stats[:failed] += 1
 
-                # Add delay even on failure to avoid rate limiting
-                sleep(10)  # 10 seconds delay after failed requests
-
                 # Create an error log with details - use safer approach to avoid closure serialization issues
                 error_log = joinpath(log_dir, "error_$(dataset)_$(year)_$(round(Int, time())).txt")
                 try
@@ -316,9 +279,10 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
     end
 
     # Report final statistics
+    success_rate = stats[:total_queries] > 0 ? round(stats[:successful]/stats[:total_queries]*100, digits=1) : 0.0
     @info "PRODCOM data fetching completed:"
     @info "  Total datasets: $(stats[:total_queries])"
-    @info "  Successfully processed: $(stats[:successful]) ($(round(stats[:successful]/stats[:total_queries]*100, digits=1))%)"
+    @info "  Successfully processed: $(stats[:successful]) ($(success_rate)%)"
     @info "  Failed: $(stats[:failed])"
     @info "  Total rows processed: $(stats[:rows_processed])"
 

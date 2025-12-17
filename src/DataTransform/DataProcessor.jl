@@ -305,7 +305,11 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
         country_mapping_df = DataFrame(DBInterface.execute(target_conn, country_mapping_query))
 
         # Load product mapping
-        product_mapping_query = "SELECT product_id, product, prodcom_code, hs_codes FROM product_mapping_codes"
+        product_mapping_query = """
+            SELECT product_id, product, prodcom_code, prodcom_code_clean,
+                   hs_codes, prodcom_epoch, epoch_start_year, epoch_end_year
+            FROM product_mapping_codes
+        """
         product_mapping_df = DataFrame(DBInterface.execute(target_conn, product_mapping_query))
 
     catch e
@@ -374,6 +378,8 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
         product_code = row.product_code
         data_source = hasproperty(row, :data_source) ? row.data_source : "COMEXT"
 
+        year_value = parse(Int, string(row.year))
+
         if data_source == "PRODCOM"
             # PRODCOM trade data already has PRODCOM codes - just normalize by removing dots
             push!(trade_expanded, (
@@ -402,7 +408,17 @@ function step4b_harmonize_production_trade_data(year::Int, config::ProcessingCon
                 normalized_hs_list = replace(hs_codes_list, "." => "")
 
                 contains_hs = occursin(normalized_hs_code, normalized_hs_list)
-                return contains_hs
+                epoch_start = hasproperty(pm_row, :epoch_start_year) ? pm_row.epoch_start_year : missing
+                epoch_end = hasproperty(pm_row, :epoch_end_year) ? pm_row.epoch_end_year : missing
+                year_in_range = true
+                if !(epoch_start === missing)
+                    year_in_range &= year_value >= Int(epoch_start)
+                end
+                if !(epoch_end === missing)
+                    year_in_range &= year_value <= Int(epoch_end)
+                end
+
+                return contains_hs && year_in_range
             end
 
             if nrow(matching_products) > 0

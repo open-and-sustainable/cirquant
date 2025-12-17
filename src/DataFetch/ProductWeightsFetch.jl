@@ -2,7 +2,7 @@ module ProductWeightsFetch
 
 using DataFrames, Dates, DuckDB, CSV, DBInterface
 using ..DatabaseAccess: write_large_duckdb_table!, table_exists
-using ..AnalysisConfigLoader: load_product_mappings
+using ..AnalysisConfigLoader: prodcom_codes_for_year
 using ..CountryCodeMapper: harmonize_country_code
 
 export fetch_product_weights_data, compute_average_weights_from_df
@@ -215,13 +215,11 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
         error("Invalid years format. Use either 'YYYY' for a single year or 'YYYY-YYYY' for a range.")
     end
 
-    product_mapping = load_product_mappings()
-    prodcom_codes = collect(product_mapping.prodcom_code)
-
     results_written = false
     for year in start_year:end_year
         @info "Calculating product average weights for year $year"
-        prodcom_df = load_prodcom_quantity_data(db_path, year, prodcom_codes)
+        code_info = prodcom_codes_for_year(year)
+        prodcom_df = load_prodcom_quantity_data(db_path, year, code_info.codes_original)
         if nrow(prodcom_df) == 0
             @warn "No PRODCOM quantity data found for year $year - skipping weight calculation"
             continue

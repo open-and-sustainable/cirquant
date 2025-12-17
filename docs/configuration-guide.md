@@ -23,14 +23,48 @@ Everything else (e.g., observed collection rates, material composition, recovery
 | `current_circularity_rate` | Eurostat waste statistics, industry surveys, SME interviews | Can be provisional placeholders until official statistics are integrated. |
 | `potential_circularity_rate` | Systematic literature reviews, policy targets, expert elicitation | Should reflect technical/economic potential; cite sources in comments or commit messages. |
 
+### 1.2 PRODCOM nomenclature epochs
+
+Eurostat restructured PRODCOM around 2008 (the transition from NACE Rev.1.1 to Rev.2). CirQuant tracks these changes explicitly:
+
+```toml
+[prodcom_epochs.legacy]
+label = "Legacy PRODCOM (NACE Rev. 1.1)"
+start_year = 1995
+end_year = 2007
+
+[prodcom_epochs.nace_rev2]
+label = "PRODCOM List 2008+ (NACE Rev. 2)"
+start_year = 2008
+end_year = 2100
+```
+
+Each product then specifies codes per epoch:
+
+```toml
+[products.heat_pumps]
+id = 1
+name = "Heat pumps"
+hs_codes = ["8418.69"]
+
+[products.heat_pumps.prodcom_codes]
+legacy = ["28.21.13.30"]         # Code valid through 2007
+nace_rev2 = ["28.25.13.80"]      # Code published from 2008 onwards
+```
+
+When you run `fetch_prodcom_data("2002-2024")`, the loader automatically chooses the right list for each year and records the epoch metadata in DuckDB (`prodcom_epoch`, `epoch_start_year`, `epoch_end_year`). COMEXT mapping will only use the codes whose epoch covers the requested trade year, so you avoid duplicate rows.
+
 ## 2. File anatomy
 
 ```toml
 [products.product_key]
 id = 1
 name = "Heat pumps"
-prodcom_codes = ["28.21.13.30"]
 hs_codes = ["8418.69"]
+
+[products.product_key.prodcom_codes]
+legacy = ["28.21.13.30"]
+nace_rev2 = ["28.25.13.80"]
 
 [products.product_key.parameters]
 weight_kg = 100.0
@@ -42,7 +76,8 @@ potential_circularity_rate = 45.0
 - `products.product_key` – use descriptive snake_case keys (e.g., `batteries_li_ion`). Keys appear in logs and database table names.
 - `id` – unique integer for ordering.
 - `name` – human-readable label in outputs.
-- `prodcom_codes` / `hs_codes` – arrays of codes with dots for readability.
+- `prodcom_codes` – nested table keyed by epoch. Each entry is an array of dot-formatted codes valid for that nomenclature.
+- `hs_codes` – array of HS codes with dots for readability (COMEXT always strips dots internally).
 - `parameters` – nested table storing weights and circularity assumptions. `unit` mirrors the PRODCOM unit description to help interpret `weight_kg`.
 
 ## 3. Defining or updating products
@@ -67,8 +102,11 @@ Example:
 [products.solar_inverters]
 id = 14
 name = "Solar inverters"
-prodcom_codes = ["27.11.50.00"]
 hs_codes = ["8504.40"]
+
+[products.solar_inverters.prodcom_codes]
+legacy = ["27.11.50.00"]
+nace_rev2 = ["27.11.50.00"]
 
 [products.solar_inverters.parameters]
 weight_kg = 35.0                       # Manufacturer data sheet
@@ -88,13 +126,13 @@ Validation checks that:
 - Required fields exist and use the correct data types.
 - `potential_circularity_rate` and `current_circularity_rate` fall within 0–100.
 - `potential >= current`.
-- Product IDs and PRODCOM codes remain unique.
+- Product IDs remain unique, every epoch lists at least one PRODCOM code, and epoch definitions specify valid year ranges.
 
 Fix any reported issues before continuing; downstream scripts assume a valid configuration.
 
 ## 5. How the configuration drives the pipeline
 
-- **Data fetching** uses `prodcom_codes` to download PRODCOM tables and `hs_codes` to request COMEXT data. Missing or incorrect codes mean the product’s data will never enter the database.
+- **Data fetching** looks up the correct PRODCOM codes for each year based on the epoch metadata, then downloads the matching EuroProMS rows. Missing or incorrect codes mean the product’s data will never enter the database.
 - **Transformation** writes configuration-derived parameters into the `parameters_circularity_rate` table inside the processed DuckDB. PRQL scripts join against this table when computing refurbishment/recycling savings.
 - **Scenario analysis** simply swaps TOML files. Maintain variants (e.g., `products_low_potential.toml`, `products_high_potential.toml`) and pass their path into your Julia session before running validation and data fetching.
 
