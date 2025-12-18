@@ -33,12 +33,12 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
     end
 
     # Datasets to fetch
-    datasets = isnothing(custom_datasets) ? ["ds-056120"] : custom_datasets
+    datasets = isnothing(custom_datasets) ? ["ds-059358"] : custom_datasets
 
     # Define indicators to fetch per dataset
     dataset_indicators = Dict(
-        "ds-056120" => ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT", "QNTUNIT"],
-        "ds-056121" => ["PRODQNT", "QNTUNIT"]
+        "ds-059358" => ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT", "QNTUNIT"],
+        "ds-059359" => ["PRODQNT", "QNTUNIT"]
     )
     default_indicators = ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT"]
 
