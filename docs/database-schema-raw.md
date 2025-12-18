@@ -18,9 +18,9 @@ Where:
 
 ## PRODCOM Tables
 
-### Table: `prodcom_ds_056120_YYYY`
+### Table: `prodcom_ds_059358_YYYY`
 
-Annual PRODCOM data with production, import, and export indicators.
+Annual PRODCOM data for sold production, imports, and exports.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -42,7 +42,7 @@ Annual PRODCOM data with production, import, and export indicators.
 | time_label | VARCHAR | Year label |
 | prodcom_code_original | VARCHAR | PRODCOM code with dots (e.g., "27.11.40.00") |
 
-**Indicators in DS-056120:**
+**Indicators in DS-059358:**
 - `PRODVAL`: Production value in EUR
 - `PRODQNT`: Production quantity
 - `EXPVAL`: Export value in EUR
@@ -51,15 +51,11 @@ Annual PRODCOM data with production, import, and export indicators.
 - `IMPQNT`: Import quantity
 - `QNTUNIT`: Unit of measurement (KG, L, M3, etc.)
 
-### Table: `prodcom_ds_056121_YYYY`
+### Table: `prodcom_ds_059359_YYYY`
 
-Simplified PRODCOM data (from 2017 onwards).
+Total production indicators (where available).
 
-Same structure as DS-056120 but typically contains only:
-- `PRODQNT`: Production quantity
-- `QNTUNIT`: Unit of measurement
-
-**Note**: Often empty due to confidentiality restrictions on EU individual country data.
+Same structure as DS-059358 but typically contains only the total production fields and units. Frequently sparse because of confidentiality restrictions on EU individual country data.
 
 ## COMEXT Tables
 
@@ -115,7 +111,7 @@ International trade data at 6-digit HS code level.
 
 ### Get all production values for heat pumps in 2020:
 ```sql
-SELECT * FROM prodcom_ds_056120_2020
+SELECT * FROM prodcom_ds_059358_2020
 WHERE prodcom_code_original = '28.21.13.30'
   AND indicators = 'PRODVAL';
 ```

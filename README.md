@@ -69,7 +69,7 @@ validate_product_config()
 
 # 2. Fetch Eurostat data (combined or per-source)
 fetch_combined_data("2020-2023")
-# fetch_prodcom_data("2020-2023", ["ds-056120", "ds-056121"])
+# fetch_prodcom_data("2020-2023", ["ds-059358", "ds-059359"])
 # fetch_comext_data("2022-2023")
 # fetch_material_composition_data("2020-2023")           # stub
 # fetch_material_recycling_rates_data("2020-2023")       # stub
@@ -138,7 +138,7 @@ results = CircularityProcessor.process_year_data(
 
 ## Databases and PRQL Support
 
-- **Raw DuckDB** (`DB_PATH_RAW`): holds per-year tables `prodcom_ds_056120_YYYY`, `prodcom_ds_056121_YYYY`, and `comext_DS_045409_YYYY`.
+- **Raw DuckDB** (`DB_PATH_RAW`): holds per-year tables `prodcom_ds_059358_YYYY`, `prodcom_ds_059359_YYYY`, and `comext_DS_045409_YYYY`.
 - **Processed DuckDB** (`DB_PATH_PROCESSED`): stores circularity indicator tables plus parameter snapshots.
 - **PRQL (Pipelined Relational Query Language)** files in `src/DataTransform/` are parameterised through `{{YEAR}}` placeholders, enabling the same query templates across multiple periods.
 

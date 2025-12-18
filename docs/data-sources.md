@@ -6,7 +6,7 @@ This note summarises every dataset currently (or soon to be) used by CirQuant an
 
 | Source | Role | Raw table pattern | Time span | Notes |
 |--------|------|------------------|-----------|-------|
-| **PRODCOM** (Eurostat) | Production and limited trade indicators by PRODCOM code | `prodcom_ds_056120_YYYY`, `prodcom_ds_056121_YYYY` | 1995–present (ds-056121 from 2017) | DS-056120 fetched by default; DS-056121 optional |
+| **PRODCOM** (Eurostat) | Production and limited trade indicators by PRODCOM code | `prodcom_ds_059358_YYYY`, `prodcom_ds_059359_YYYY` | 1995–present | DS-059358 (sold production/trade) fetched by default; DS-059359 (total production) optional |
 | **COMEXT** (Eurostat) | Trade flows by HS6 code (imports/exports, intra/extra EU) | `comext_ds_059341_YYYY` | 2002–present | Primary source for trade data |
 | **Waste statistics** (Eurostat) | Collection rates for electronics/batteries | `env_waselee_YYYY`, `env_wasbat_YYYY` (planned) | Various | Integration pending |
 | **Waste treatment / material recovery** | Recovery efficiencies by material | `env_wastrt_YYYY` (planned) | Various | Provides recovery percentages |
@@ -19,8 +19,8 @@ Only PRODCOM and COMEXT populate the raw DuckDB today; other sources will follow
 
 ### 2.1 Datasets
 
-- **DS-056120** – Annual PRODCOM data by PRODCOM_LIST (NACE Rev. 2). Provides production, import, and export indicators for each declarant country and EU aggregates (time range 1995–2023 in the current database snapshot).
-- **DS-056121** – Supplemental dataset (from 2017) with `PRODQNT` and `QNTUNIT` indicators at finer disclosure levels. Not fetched by default because it often returns empty responses due to confidentiality; request it explicitly via the `custom_datasets` argument.
+- **DS-059358** – Annual PRODCOM data by PRODCOM_LIST (NACE Rev. 2). Provides sold production plus export/import indicators for each declarant country and EU aggregates (time range 1995–2023 in the current database snapshot).
+- **DS-059359** – Total production dataset. Useful when sold production figures diverge from total output; not fetched by default because it often returns empty responses due to confidentiality. Request explicitly via the `custom_datasets` argument.
 
 ### 2.2 Raw schema alignment
 
@@ -34,18 +34,19 @@ Both datasets are written to tables named `prodcom_ds_<dataset>_<year>` exactly 
 Indicator definitions:
 - `PRODVAL` – Production value (EUR)
 - `PRODQNT` – Production quantity (units vary; see `QNTUNIT`)
-- `EXPVAL`, `EXPQNT` – Export value/quantity
-- `IMPVAL`, `IMPQNT` – Import value/quantity
+- `EXPVAL`, `EXPQNT` – Export value/quantity (DS-059358)
+- `IMPVAL`, `IMPQNT` – Import value/quantity (DS-059358)
 - `QNTUNIT` – Unit label (KG, L, M3, etc.)
+- Total production indicators – Reported in DS-059359; available fields mirror Eurostat’s total production outputs for the requested year.
 
 ### 2.3 Usage notes
 
 - PRODCOM trade indicators act as a fallback only when COMEXT has zeros for a product-year combination.
 - Confidentiality frequently suppresses `PRODQNT` at EU aggregates; the system logs empty responses but continues processing.
-- When fetching DS-056121:
+- When fetching DS-059359 for total production:
   ```julia
-  fetch_prodcom_data("2017-2023", ["ds-056121"])  # Only supplemental dataset
-  fetch_prodcom_data("2017-2023", ["ds-056120", "ds-056121"])  # Fetch both
+  fetch_prodcom_data("2017-2023", ["ds-059359"])  # Only total production dataset
+  fetch_prodcom_data("2017-2023", ["ds-059358", "ds-059359"])  # Fetch both
   ```
 
 ## 3. COMEXT (Trade statistics)
@@ -126,11 +127,11 @@ Each product entry in `config/products.toml` lists PRODCOM and HS codes which fe
 - **Fallback storage** – If DuckDB writes fail, CSV backups are generated so no fetch is lost.
 
 ### 6.3 Handling non-default datasets
-Use the `custom_datasets` argument when calling `fetch_prodcom_data` to include DS-056121 or other PRODCOM datasets. This keeps the default workflow lightweight while still supporting targeted research.
+Use the `custom_datasets` argument when calling `fetch_prodcom_data` to include DS-059359 or other PRODCOM datasets. This keeps the default workflow lightweight while still supporting targeted research.
 
 ## 7. Known issues and coverage gaps
 
-1. **Confidentiality** – DS-056121 and certain PRODCOM indicators return empty results for EU aggregates or small countries. Expect gaps and rely on COMEXT/other sources when possible.
+1. **Confidentiality** – DS-059359 and certain PRODCOM indicators return empty results for EU aggregates or small countries. Expect gaps and rely on COMEXT/other sources when possible.
 2. **Trade gaps** – Some HS codes lack trade entries in early years or for specific partner combinations. Logged as empty results; analysts may need to cross-check or adjust mapping codes.
 3. **Unit heterogeneity** – `QNTUNIT` varies widely; downstream conversion scripts must handle litres, pieces, square metres, etc.
 4. **Historical limits** – PRODCOM extends to 1995, but COMEXT starts in 2002, constraining the overlap period available for joint analyses.
