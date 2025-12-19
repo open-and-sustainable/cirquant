@@ -40,7 +40,12 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
         "ds-059358" => ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT", "QNTUNIT"],
         "ds-059359" => ["PRODQNT", "QNTUNIT"]
     )
+    dataset_sources = Dict(
+        "ds-059358" => [:api],
+        "ds-059359" => [:api]
+    )
     default_indicators = ["PRODVAL", "PRODQNT", "EXPVAL", "EXPQNT", "IMPVAL", "IMPQNT"]
+    default_sources = [:bulk, :api]
 
     @info "Using database path: $db_path"
 
@@ -95,6 +100,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
     for dataset in datasets
         @info "Processing dataset: $dataset"
         indicators = get(dataset_indicators, dataset, default_indicators)
+        sources = get(dataset_sources, dataset, default_sources)
 
         for year in start_year:end_year
             @info "Fetching data for year: $year"
@@ -120,18 +126,31 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                 # Use ProdcomAPI with indicator filters
                 # Initialize combined_df outside to ensure proper scope
                 combined_df = DataFrame()
-                @info "Fetching $dataset for year $year with indicators: $indicators (bulk source)"
+                @info "Fetching $dataset for year $year with indicators: $indicators (sources: $sources)"
 
                 for indicator in indicators
-                    try
-                        indicator_df = ProdcomAPI.fetch_prodcom_data(dataset, year, indicator;
-                                                                    verbose=false, source=:bulk)
+                    indicator_df = nothing
+                    source_used = nothing
 
-                        if isnothing(indicator_df) || nrow(indicator_df) == 0
-                            @warn "No data returned for $dataset, year $year, indicator $indicator"
-                            continue
+                    # Try each source (bulk first by default; API-only for unsupported datasets)
+                    for source in sources
+                        try
+                            indicator_df = ProdcomAPI.fetch_prodcom_data(
+                                dataset, year, indicator;
+                                verbose=false, source=source
+                            )
+                            source_used = source
+                            break
+                        catch e
+                            @warn "Failed to fetch indicator $indicator for $dataset, year $year with source $source" exception = e
                         end
+                    end
 
+                    if isnothing(indicator_df)
+                        @warn "No data returned for $dataset, year $year, indicator $indicator after trying sources $sources"
+                        continue
+                    end
+                    try
                         indicator_df[!, :prccode] = string.(indicator_df.prccode)
                         mask = in.(indicator_df.prccode, Ref(prodcom_code_set))
                         filtered_df = indicator_df[mask, :]
@@ -153,7 +172,7 @@ function fetch_prodcom_data(years_range="1995-2023", custom_datasets=nothing; db
                             combined_df = vcat(combined_df, filtered_df, cols=:union)
                         end
                     catch e
-                        @warn "Failed to fetch indicator $indicator for $dataset, year $year" exception = e
+                        @warn "Failed to process indicator $indicator for $dataset, year $year (source used: $source_used)" exception = e
                     end
                 end
 
