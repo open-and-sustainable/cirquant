@@ -16,6 +16,7 @@ global ANALYSIS_PARAMETERS = Dict{String,Any}()
 # Include and use the modules
 include("utils/DatabaseAccess.jl")
 include("utils/AnalysisConfigLoader.jl")
+include("DataFetch/FetchUtils.jl")
 include("DataFetch/ProdcomDataFetch.jl")
 include("DataFetch/ComextDataFetch.jl")
 include("DataTransform/CountryCodeMapper.jl")
@@ -27,6 +28,7 @@ include("DataTransform/DataProcessor.jl")
 
 using .DatabaseAccess
 using .AnalysisConfigLoader
+using .FetchUtils
 using .ProdcomDataFetch
 using .ComextDataFetch
 using .MaterialCompositionFetch
@@ -41,25 +43,25 @@ global ANALYSIS_PARAMETERS = AnalysisConfigLoader.load_analysis_parameters()
 
 
 """
-    fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing)
+    fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing; db_path=nothing, kwargs...)
 
-Fetches PRODCOM data using the external ProdcomAPI package and saves it to the raw DuckDB database.
-This function delegates all Eurostat API interactions to ProdcomAPI.jl, which handles the
-complex data fetching and transformation logic. The function focuses on orchestrating the
-data fetch process and persisting results to the database.
+Fetches PRODCOM data using the external ProdcomAPI package and saves it to DuckDB.
+Defaults to the main raw DB, but `db_path` can override (e.g., for test fixtures).
+Other keyword arguments are forwarded to `ProdcomDataFetch.fetch_prodcom_data`.
 
 Parameters:
-- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2024".
-- `custom_datasets`: Optional. An array of dataset IDs to fetch.
-                   If not provided, default datasets will be used.
+- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR". Default: "2002-2024".
+- `custom_datasets`: Optional array of dataset IDs to fetch. Default: module defaults.
+- `db_path`: Optional custom database path. Defaults to `DB_PATH_RAW` when `nothing`.
+- Additional kwargs: passed through (e.g., `parallel_years`, `max_parallel_years`, rate limits).
 
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing)
-    @info "Fetching PRODCOM data for years $years_str and saving to database"
-    return ProdcomDataFetch.fetch_prodcom_data(years_str, custom_datasets; db_path=DB_PATH_RAW)
+function fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing; db_path=nothing, kwargs...)
+    target_db = isnothing(db_path) ? DB_PATH_RAW : db_path
+    @info "Fetching PRODCOM data for years $years_str and saving to database $target_db"
+    return ProdcomDataFetch.fetch_prodcom_data(years_str, custom_datasets; db_path=target_db, kwargs...)
 end
 
 """
