@@ -51,7 +51,8 @@ Indicator definitions:
 - Fetching options:
   - Parallel per-year fetch is available via `parallel_years=true` and `max_parallel_years` (defaults to 2). A shared rate limiter (`rate_limit_seconds`, `rate_limit_jitter`) is applied across workers to avoid API bursts.
   - The shell wrapper `fetch_data.sh` exposes these as env vars (e.g., `PARALLEL_YEARS=true MAX_PARALLEL_YEARS=2 RATE_LIMIT_SECONDS=0.6`).
-  - For a fast development snapshot, `fetch_test_data.sh "2002"` writes to `CirQuant-database/raw/test.duckdb`; adjust `DB_PATH` to target another test database.
+  - For a fast development snapshot, `fetch_test_data.sh "2022-2023" "heat_pumps,pv_panels"` writes to `CirQuant-database/raw/test.duckdb`; adjust `DB_PATH` to target another test database.
+  - Limit scope with `product_keys_filter` (e.g., `["heat_pumps","pv_panels"]`) when calling `fetch_prodcom_data` to keep test downloads small and focused.
 
 ## 3. COMEXT (Trade statistics)
 

@@ -53,7 +53,7 @@ Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR". Default: "2002-2024".
 - `custom_datasets`: Optional array of dataset IDs to fetch. Default: module defaults.
 - `db_path`: Optional custom database path. Defaults to `DB_PATH_RAW` when `nothing`.
-- Additional kwargs: passed through (e.g., `parallel_years`, `max_parallel_years`, rate limits).
+- Additional kwargs: passed through (e.g., `parallel_years`, `max_parallel_years`, rate limits, `product_keys_filter`).
 
 Returns:
 - Statistics about the fetching process including success/failure counts

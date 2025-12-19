@@ -20,6 +20,7 @@ Data is saved to DuckDB tables in the raw database.
 - `parallel_years`: Run per-year fetches with bounded concurrency (default: false)
 - `max_parallel_years`: Maximum concurrent year workers when `parallel_years` is true (default: 2)
 - `rate_limit_seconds` / `rate_limit_jitter`: Shared throttle between workers to avoid API bursts
+- `product_keys_filter`: Optional vector of product keys (as in `products.<key>`) to limit fetch scope
 """
 function fetch_prodcom_data(
     years_range="1995-2023",
@@ -28,7 +29,8 @@ function fetch_prodcom_data(
     parallel_years::Bool=false,
     max_parallel_years::Int=2,
     rate_limit_seconds::Float64=0.6,
-    rate_limit_jitter::Float64=0.2
+    rate_limit_jitter::Float64=0.2,
+    product_keys_filter=nothing
 )
     # Parse years
     years = split(years_range, "-")
@@ -119,7 +121,7 @@ function fetch_prodcom_data(
         process_year = function (year)
             year_stats = (successful=0, failed=1, rows_processed=0)
             try
-                code_info = prodcom_codes_for_year(year)
+                code_info = prodcom_codes_for_year(year; products_filter=product_keys_filter)
                 prodcom_code_set = Set(code_info.codes_clean)
                 prodcom_code_map = code_info.clean_to_original
 

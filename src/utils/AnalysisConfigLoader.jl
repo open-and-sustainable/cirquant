@@ -175,7 +175,7 @@ function _select_fallback_codes(code_sets::Dict{String,Vector{String}},
 end
 
 """
-    prodcom_codes_for_year(year::Int; config_path::String = PRODUCTS_CONFIG_PATH)
+    prodcom_codes_for_year(year::Int; config_path::String = PRODUCTS_CONFIG_PATH, products_filter=nothing)
 
 Return the PRODCOM codes (with and without dots) that should be used for the requested year.
 
@@ -188,10 +188,11 @@ Return the PRODCOM codes (with and without dots) that should be used for the req
   - `clean_to_original`: Dict mapping cleaned codes to the original representation
   - `clean_to_product`: Dict mapping cleaned codes to `(product_id, product_name)`
 """
-function prodcom_codes_for_year(year::Int; config_path::String = PRODUCTS_CONFIG_PATH)
+function prodcom_codes_for_year(year::Int; config_path::String = PRODUCTS_CONFIG_PATH, products_filter=nothing)
     config = _load_products_config(config_path)
     epochs = _get_prodcom_epochs(config)
     ordered_epochs = _ordered_epoch_keys(epochs)
+    filter_keys = isnothing(products_filter) ? nothing : Set(string.(products_filter))
 
     epoch_key = _select_epoch_for_year(year, epochs)
     if epoch_key === nothing
@@ -204,7 +205,10 @@ function prodcom_codes_for_year(year::Int; config_path::String = PRODUCTS_CONFIG
     clean_to_original = Dict{String,String}()
     clean_to_product = Dict{String,Tuple{Int,String}}()
 
-    for (_, product_data) in products
+    for (product_key, product_data) in products
+        if filter_keys !== nothing && !(string(product_key) in filter_keys)
+            continue
+        end
         code_sets = _collect_prodcom_code_sets(product_data)
         selected_codes = get(code_sets, epoch_key, nothing)
         if selected_codes === nothing
