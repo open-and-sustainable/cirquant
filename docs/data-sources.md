@@ -48,6 +48,10 @@ Indicator definitions:
   fetch_prodcom_data("2017-2023", ["ds-059359"])  # Only total production dataset
   fetch_prodcom_data("2017-2023", ["ds-059358", "ds-059359"])  # Fetch both
   ```
+- Fetching options:
+  - Parallel per-year fetch is available via `parallel_years=true` and `max_parallel_years` (defaults to 2). A shared rate limiter (`rate_limit_seconds`, `rate_limit_jitter`) is applied across workers to avoid API bursts.
+  - The shell wrapper `fetch_data.sh` exposes these as env vars (e.g., `PARALLEL_YEARS=true MAX_PARALLEL_YEARS=2 RATE_LIMIT_SECONDS=0.6`).
+  - For a fast development snapshot, `fetch_test_data.sh "2002"` writes to `CirQuant-database/raw/test.duckdb`; adjust `DB_PATH` to target another test database.
 
 ## 3. COMEXT (Trade statistics)
 

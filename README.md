@@ -95,6 +95,10 @@ process_data("2022", cleanup_temp_tables=false, prql_timeout=600)
 process_data(use_test_mode=true)   # uses 2002 test data
 ```
 
+### Fetching options and test DB
+- Parallel per-year PRODCOM fetch: set env vars in `fetch_data.sh`, e.g. `PARALLEL_YEARS=true MAX_PARALLEL_YEARS=2 RATE_LIMIT_SECONDS=0.6 RATE_LIMIT_JITTER=0.2 ./fetch_data.sh "2020-2023"`.
+- Quick test snapshot: `./fetch_test_data.sh "2002"` populates `CirQuant-database/raw/test.duckdb` so you can develop while the full raw download runs.
+
 ## Data Transformation & Indicators
 
 The **DataTransform** module turns raw PRODCOM/COMEXT tables into harmonised circularity indicators by:
