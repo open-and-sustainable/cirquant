@@ -80,8 +80,13 @@ harmonize_country_code("2027", :prodcom)  # Returns "EU27_2020"
 function harmonize_country_code(code::String, source::Symbol)
     # Clean the input
     code = strip(code)
+    upper_code = uppercase(code)
 
     if source == :prodcom
+        # If already an ISO-like code (2 letters or known aggregate), return as-is
+        if length(upper_code) == 2 || startswith(upper_code, "EU")
+            return haskey(SPECIAL_MAPPINGS, upper_code) ? SPECIAL_MAPPINGS[upper_code] : upper_code
+        end
         # Check if it's a numeric PRODCOM code
         if haskey(PRODCOM_TO_ISO_MAP, code)
             return PRODCOM_TO_ISO_MAP[code]

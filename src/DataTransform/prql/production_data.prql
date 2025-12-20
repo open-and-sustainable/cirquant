@@ -2,10 +2,10 @@
 # This query extracts production volumes and values by product and country for a specific year
 # For now, only using the first dataset to avoid union issues
 
-from prodcom_ds_056120_{{YEAR}}
+from prodcom_ds_059358_{{YEAR}}
 # Filter for production indicators only and exclude unit values
 filter indicators == "PRODQNT" || indicators == "PRODVAL"
-filter value != "kg" && value != "p/st" && value != "m" && value != "m2" && value != "m3" && value != "l" && value != "hl" && value != "ct/l"
+filter value != "kg" && value != "p/st" && value != "pst" && value != "m" && value != "m2" && value != "m3" && value != "l" && value != "hl" && value != "ct/l"
 derive {
     # Convert value based on indicator type, using TRY_CAST to handle non-numeric values
     production_volume_tonnes = s"CASE WHEN indicators = 'PRODQNT' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
@@ -15,12 +15,12 @@ derive {
     # Map time column to year
     year = s"TRY_CAST(time AS INTEGER)",
     # Derive level based on geo
-    level = s"CASE WHEN decl = 'EU27' THEN 'EU' ELSE 'country' END"
+    level = s"CASE WHEN reporter = 'EU27' THEN 'EU' ELSE 'country' END"
 }
 select {
     product_code = product_code_clean,
     year,
-    geo = decl,
+    geo = reporter,
     level,
     production_volume_tonnes,
     production_value_eur

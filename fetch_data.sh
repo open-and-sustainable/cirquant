@@ -33,10 +33,10 @@ echo "Parallel years: $PARALLEL_YEARS (max=$MAX_PARALLEL_YEARS, rate_limit=${RAT
 echo
 
 # Run the Julia script
-julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_prodcom_data(\"$YEARS\"; parallel_years=$PARALLEL_YEARS, max_parallel_years=$MAX_PARALLEL_YEARS, rate_limit_seconds=$RATE_LIMIT_SECONDS, rate_limit_jitter=$RATE_LIMIT_JITTER)" 2>&1 | tee prodcom.log
+#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_prodcom_data(\"$YEARS\"; parallel_years=$PARALLEL_YEARS, max_parallel_years=$MAX_PARALLEL_YEARS, rate_limit_seconds=$RATE_LIMIT_SECONDS, rate_limit_jitter=$RATE_LIMIT_JITTER)" 2>&1 | tee prodcom.log
 #julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_comext_data(\"$YEARS\")" 2>&1 | tee comext.log
 #julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_material_composition_data(\"$YEARS\")" 2>&1 | tee material_composition.log
-#julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee combined_fetch.log
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.fetch_combined_data(\"$YEARS\")" 2>&1 | tee combined_fetch.log
 
 echo
 echo "Process completed. Log saved to combined_fetch.log"

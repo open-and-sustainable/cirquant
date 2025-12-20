@@ -25,6 +25,7 @@ const MASS_UNIT_FACTORS = Dict(
 const COUNT_UNITS = Set([
     "p/st",
     "p/st.",
+    "pst",
     "pieces",
     "piece",
     "units",
@@ -55,7 +56,7 @@ function parse_numeric_value(val)
 end
 
 function load_prodcom_quantity_data(db_path::String, year::Int, prodcom_codes::Vector{String})
-    table_name = "prodcom_ds_056120_$(year)"
+    table_name = "prodcom_ds_059358_$(year)"
     if !table_exists(db_path, table_name)
         @warn "PRODCOM table $(table_name) not found in raw database, skipping year $(year)"
         return DataFrame()
@@ -70,7 +71,7 @@ function load_prodcom_quantity_data(db_path::String, year::Int, prodcom_codes::V
     end
 
     query = """
-        SELECT time, prccode, decl, indicators, value
+        SELECT time, prccode, reporter, indicators, value
         FROM \"$table_name\"
         WHERE indicators IN ('PRODQNT', 'QNTUNIT')$filter_clause
     """
@@ -94,7 +95,7 @@ It expects a DataFrame with PRODCOM indicators (including `PRODQNT` and `QNTUNIT
 returns average weights per product/year pair by dividing total mass (tonnes) by total unit counts.
 """
 function compute_average_weights_from_df(prodcom_df::DataFrame; year::Union{Nothing,Int}=nothing)
-    required_columns = [:time, :prccode, :decl, :indicators, :value]
+    required_columns = [:time, :prccode, :reporter, :indicators, :value]
     missing_cols = setdiff(required_columns, Symbol.(names(prodcom_df)))
     if !isempty(missing_cols)
         error("DataFrame missing required PRODCOM columns: $(missing_cols)")
@@ -108,7 +109,7 @@ function compute_average_weights_from_df(prodcom_df::DataFrame; year::Union{Noth
     qntunit_rows = filter(:indicators => (x -> uppercase(x) == "QNTUNIT"), prodcom_df)
     unit_lookup = Dict{Tuple{String,String,String},String}()
     for row in eachrow(qntunit_rows)
-        key = (String(row.time), String(row.prccode), String(row.decl))
+        key = (String(row.time), String(row.prccode), String(row.reporter))
         unit_lookup[key] = normalize_unit(String(row.value))
     end
 
@@ -121,15 +122,15 @@ function compute_average_weights_from_df(prodcom_df::DataFrame; year::Union{Noth
     for row in eachrow(prodqnt_rows)
         prod_time = String(row.time)
         prod_code = String(row.prccode)
-        decl_code = String(row.decl)
-        unit = get(unit_lookup, (prod_time, prod_code, decl_code), nothing)
+        reporter_code = String(row.reporter)
+        unit = get(unit_lookup, (prod_time, prod_code, reporter_code), nothing)
         parsed_value = parse_numeric_value(row.value)
         if unit === nothing || parsed_value === nothing || parsed_value <= 0
             continue
         end
 
         normalized = normalize_unit(unit)
-        iso_geo = harmonize_country_code(decl_code, :prodcom)
+        iso_geo = harmonize_country_code(reporter_code, :prodcom)
         geo_key = (prod_time, prod_code, iso_geo)
         eu_key = (prod_time, prod_code)
 

@@ -3,18 +3,18 @@
 
 # First, extract unit information from QNTUNIT indicator
 let unit_data = (
-    from prodcom_ds_056120_{{YEAR}}
+    from prodcom_ds_059358_{{YEAR}}
     filter indicators == "QNTUNIT"
     select {
         product_code = prccode,
         unit = value,
-        geo = decl
+        geo = reporter
     }
 )
 
 # Extract quantity values from PRODQNT indicator
 let quantity_data = (
-    from prodcom_ds_056120_{{YEAR}}
+    from prodcom_ds_059358_{{YEAR}}
     filter indicators == "PRODQNT"
     # Filter out rows where value contains unit strings instead of numbers
     filter value != "kg" && value != "p/st" && value != "ce/el" && value != "m" && value != "m2" && value != "m3" && value != "l" && value != "hl" && value != "ct/l"
@@ -24,7 +24,7 @@ let quantity_data = (
     filter quantity_value != null
     select {
         product_code = prccode,
-        geo = decl,
+        geo = reporter,
         quantity_raw = quantity_value
     }
 )

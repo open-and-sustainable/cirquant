@@ -51,7 +51,7 @@ Other keyword arguments are forwarded to `ProdcomDataFetch.fetch_prodcom_data`.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR". Default: "2002-2024".
-- `custom_datasets`: Optional array of dataset IDs to fetch. Default: module defaults.
+- `custom_datasets`: Optional array of dataset IDs to fetch. Default: module defaults (["ds-059358"]).
 - `db_path`: Optional custom database path. Defaults to `DB_PATH_RAW` when `nothing`.
 - Additional kwargs: passed through (e.g., `parallel_years`, `max_parallel_years`, rate limits, `product_keys_filter`).
 
@@ -95,7 +95,7 @@ Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
               Default is "2002-2024".
 - `prodcom_datasets`: Optional. Array of Prodcom dataset IDs to fetch.
-                     If not provided, defaults to ["ds-056120"].
+                     If not provided, defaults to ["ds-059358"].
 - `comext_datasets`: Optional. Array of Comext dataset IDs to fetch.
                     If not provided, defaults to ["DS-059341"].
 
