@@ -89,35 +89,40 @@ function load_prodcom_quantity_data(db_path::String, year::Int, prodcom_codes::V
 end
 
 function load_comext_quantity_data(db_path::String, year::Int, hs_codes::Vector{String})
-    table_name = "comext_ds_059341_$(year)"
-    if !table_exists(db_path, table_name)
-        @warn "COMEXT table $(table_name) not found in raw database, skipping year $(year)"
-        return DataFrame()
-    end
-
+    tables = ["comext_ds_059341_$(year)", "comext_ds_059322_$(year)"]
     code_list = unique(hs_codes)
-    filter_clause = ""
-    if !isempty(code_list)
-        cleaned = [replace(code, "." => "") for code in code_list]
-        quoted = join(["'$(code)'" for code in cleaned], ",")
-        filter_clause = " AND product IN ($quoted)"
+    dfs = DataFrame[]
+
+    for table_name in tables
+        if !table_exists(db_path, table_name)
+            continue
+        end
+
+        filter_clause = ""
+        if !isempty(code_list)
+            cleaned = [replace(code, "." => "") for code in code_list]
+            quoted = join(["'$(code)'" for code in cleaned], ",")
+            filter_clause = " AND product IN ($quoted)"
+        end
+
+        query = """
+            SELECT time, product, reporter, indicators, value
+            FROM \"$table_name\"
+            WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY')$filter_clause
+        """
+
+        db = DuckDB.DB(db_path)
+        con = DBInterface.connect(db)
+        try
+            df = DataFrame(DuckDB.query(con, query))
+            push!(dfs, df)
+        finally
+            DBInterface.close!(con)
+            DBInterface.close!(db)
+        end
     end
 
-    query = """
-        SELECT time, product, reporter, indicators, value
-        FROM \"$table_name\"
-        WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY')$filter_clause
-    """
-
-    db = DuckDB.DB(db_path)
-    con = DBInterface.connect(db)
-    try
-        df = DataFrame(DuckDB.query(con, query))
-        return df
-    finally
-        DBInterface.close!(con)
-        DBInterface.close!(db)
-    end
+    return isempty(dfs) ? DataFrame() : reduce((a,b)->vcat(a,b, cols=:union), dfs)
 end
 
 """
@@ -330,6 +335,14 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
 
     results_written = false
     default_weights = _default_weight_map()
+    cfg = TOML.parsefile(joinpath(@__DIR__, "..", "..", "config", "products.toml"))
+    products_cfg = get(cfg, "products", Dict{String,Any}())
+    product_cn8 = Dict{Int,Vector{String}}()
+    for (_, pdata) in products_cfg
+        pid = pdata["id"]
+        cn8_list = [replace(strip(string(c)), "." => "") for c in get(pdata, "cn8_codes", String[])]
+        product_cn8[pid] = cn8_list
+    end
     for year in start_year:end_year
         @info "Calculating product average weights for year $year"
         code_info = prodcom_codes_for_year(year)
@@ -344,18 +357,23 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
                 push!(hs_list, clean_code)
             end
         end
-        comext_df = load_comext_quantity_data(db_path, year, hs_list)
+        cn8_list = unique(vcat(values(product_cn8)...))
+        comext_df = load_comext_quantity_data(db_path, year, unique(vcat(hs_list, cn8_list)))
 
         weights_sources = DataFrame()
 
         if nrow(comext_df) > 0
-            # Build HS -> prodcom map (use year-appropriate prodcom codes)
+            # Build HS/CN8 -> prodcom map (use year-appropriate prodcom codes)
             hs_to_prodcom = Dict{String,String}()
             for row in eachrow(mapping_df)
                 if row.epoch_start_year <= year <= row.epoch_end_year
                     for hs in split(String(row.hs_codes), ",")
                         clean_hs = replace(strip(hs), "." => "")
                         hs_to_prodcom[clean_hs] = String(row.prodcom_code_clean)
+                    end
+                    for cn8 in get(product_cn8, row.product_id, String[])
+                        clean_cn8 = replace(strip(cn8), "." => "")
+                        hs_to_prodcom[clean_cn8] = String(row.prodcom_code_clean)
                     end
                 end
             end

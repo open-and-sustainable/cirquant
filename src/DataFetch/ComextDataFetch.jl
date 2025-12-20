@@ -20,7 +20,7 @@ Data is saved to DuckDB tables in the raw database.
 - `custom_datasets`: If empty only DS-059341 is used
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 """
-function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String, product_keys_filter=nothing)
+function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String, product_keys_filter=nothing, prefer_cn8::Bool=false)
     # Parse years
     years = split(years_range, "-")
     if length(years) == 1
@@ -34,7 +34,8 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
     end
 
     # Fixed parameters
-    datasets = isnothing(custom_datasets) ? ["ds-059341"] : custom_datasets
+    default_datasets = prefer_cn8 ? ["ds-059322"] : ["ds-059341"]
+    datasets = isnothing(custom_datasets) ? default_datasets : custom_datasets
     freq = "A"  # Annual frequency
 
     # Define indicators (include supplementary quantity when available for unit counts)
@@ -60,41 +61,51 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
         mkpath(db_dir)
     end
 
-    # Get HS codes from AnalysisConfigLoader
+    # Get product codes from configuration
     product_mapping = load_product_mappings()
+    cfg = TOML.parsefile(AnalysisConfigLoader.PRODUCTS_CONFIG_PATH)
+    products_cfg = get(cfg, "products", Dict{String,Any}())
+    filter_set = isnothing(product_keys_filter) ? nothing : Set(string.(product_keys_filter))
 
-    # Extract and process unique HS codes
-    all_hs_codes = Set{String}()
-    if product_keys_filter !== nothing
-        target_keys = Set(string.(product_keys_filter))
-        cfg = TOML.parsefile(AnalysisConfigLoader.PRODUCTS_CONFIG_PATH)
-        products = get(cfg, "products", Dict{String,Any}())
-        for (key, pdata) in products
-            if !(key in target_keys)
-                continue
-            end
-            for code in get(pdata, "hs_codes", String[])
-                clean_code = replace(strip(string(code)), "." => "")
-                isempty(clean_code) && continue
-                push!(all_hs_codes, clean_code)
-            end
-        end
-    else
-        for hs_code_entry in product_mapping.hs_codes
-            # Split by comma and clean each code
-            codes = split(hs_code_entry, ",")
-            for code in codes
-                # Clean: trim whitespace and remove dots
-                clean_code = replace(strip(code), "." => "")
-                if !isempty(clean_code)
-                    push!(all_hs_codes, clean_code)
+    function collect_codes(key::String; default_from_mapping=false)
+        codes = Set{String}()
+        if default_from_mapping
+            for hs_code_entry in product_mapping.hs_codes
+                for code in split(hs_code_entry, ",")
+                    clean_code = replace(strip(code), "." => "")
+                    isempty(clean_code) && continue
+                    push!(codes, clean_code)
                 end
             end
+            return collect(codes)
         end
+        for (k, pdata) in products_cfg
+            if filter_set !== nothing && !(k in filter_set)
+                continue
+            end
+            for code in get(pdata, key, String[])
+                clean_code = replace(strip(string(code)), "." => "")
+                isempty(clean_code) && continue
+                push!(codes, clean_code)
+            end
+        end
+        return collect(codes)
     end
 
-    unique_hs_codes = collect(all_hs_codes)
-    @info "Found $(length(unique_hs_codes)) unique HS codes to fetch"
+    cn8_codes = collect_codes("cn8_codes")
+    hs_codes = collect_codes("hs_codes"; default_from_mapping=filter_set === nothing)
+
+    code_list = if prefer_cn8 && !isempty(cn8_codes)
+        @info "Using CN8 codes for COMEXT fetch (prefer_cn8=true)"
+        cn8_codes
+    else
+        if prefer_cn8 && isempty(cn8_codes)
+            @warn "prefer_cn8=true but no cn8_codes found for selected products; falling back to HS codes"
+        end
+        hs_codes
+    end
+
+    @info "Found $(length(code_list)) unique $(prefer_cn8 ? \"CN8\" : \"HS\") codes to fetch"
 
     # Track statistics
     stats = Dict(
@@ -114,8 +125,8 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
             # Collect all data for this year
             year_data = DataFrame()
 
-            # Process each HS code
-            for hs_code in unique_hs_codes
+            # Process each product code (HS or CN8 depending on selection)
+            for hs_code in code_list
                 # Process each indicator
                 for indicator in indicators
                     # Process each partner type
