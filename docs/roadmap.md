@@ -23,45 +23,6 @@ This document outlines the data needs and computation steps required to enhance 
 - Structure: Rows by product × geo
 - Annual updates to reflect evolving product designs and materials
 
-### 2. Material-Specific Recycling Rates
-
-**Requirements:**
-- Recycling/recovery rates for each material type
-- Annual data (2002-2023)
-- By EU country and EU aggregates
-- Stored in database, not config
-
-**Potential Sources:**
-- Eurostat waste statistics (env_wastrt)
-- Material flow accounts (env_ac_mfa)
-- National waste reports
-
-**Implementation:**
-- Raw database: `env_wastrt_YYYY` (waste treatment statistics)
-- Processed database: `material_recycling_rates_YYYY`
-- Structure: Rows by material × geo (country code)
-- Annual updates from Eurostat API
-
-### 3. Current Collection/Recycling Rates
-
-**Requirements:**
-- Product collection rates (% sent to recycling facilities)
-- Product-specific where available (WEEE, batteries)
-- Annual data (2002-2023)
-- By country and EU aggregates
-- Note: Refurbishment rates largely unavailable in official statistics
-
-**Potential Sources:**
-- WEEE collection statistics (env_waselee)
-- Battery collection data (env_wasbat)
-- General waste statistics for other products
-
-**Implementation:**
-- Raw database: `env_waselee_YYYY` (WEEE), `env_wasbat_YYYY` (batteries), others unknown
-- Processed database: `product_collection_rates_YYYY`
-- Structure: Rows by product × geo
-- Fetched from Eurostat waste datasets where available
-
 ## Computation Steps to Implement
 
 ### Step 1: Calculate Material-Weighted Recovery Rates

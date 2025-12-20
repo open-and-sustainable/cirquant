@@ -11,6 +11,7 @@ The raw database stores data exactly as fetched from Eurostat APIs without trans
 Tables follow a consistent naming pattern:
 - PRODCOM: `prodcom_ds_XXXXXX_YYYY`
 - COMEXT: `comext_ds_XXXXXX_YYYY`
+- Waste treatment/collection: `env_<dataset>_YYYY`
 
 Where:
 - `XXXXXX` is the dataset ID (with hyphens replaced by underscores)
@@ -95,6 +96,29 @@ International trade data at 6-digit HS code level.
 **Partners:**
 - `INT_EU27_2020`: Intra-EU27 trade (from 2020)
 - `EXT_EU27_2020`: Extra-EU27 trade (from 2020)
+
+## Waste Treatment / Collection Tables
+
+### Table: `env_wastrt_YYYY`
+Waste treatment statistics by waste category and operation.
+
+Key dimensions/columns (as returned by EurostatAPI):
+- `freq`, `unit`, `hazard`, `wst_oper`, `waste`, `geo`, `time`, `value`
+- Additional columns: `dataset`, `year`, `fetch_date`, `original_key`, `original_value`
+
+### Table: `env_waseleeos_YYYY`
+WEEE open-scope collection/sales data (post-2018 categories).
+
+Key dimensions/columns:
+- `freq`, `waste`, `wst_oper`, `unit`, `geo`, `time`, `value`
+- Additional columns: `dataset`, `year`, `fetch_date`, `original_key`, `original_value`
+
+### Table: `env_waspb_YYYY`
+Portable battery sales/collection.
+
+Key dimensions/columns:
+- `freq`, `wst_oper`, `waste`, `unit`, `geo`, `time`, `value`
+- Additional columns: `dataset`, `year`, `fetch_date`, `original_key`, `original_value`
 
 ## Data Types and Storage Decisions
 
