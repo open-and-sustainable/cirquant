@@ -4,7 +4,7 @@ using DataFrames
 using DuckDB, DBInterface
 using Dates
 using Dates: now, format
-using ..ProductWeightsFetch
+using ..ProductWeightsBuilder
 using ..DatabaseAccess
 using ..AnalysisConfigLoader
 using ..CountryCodeMapper
@@ -701,7 +701,7 @@ Build product_weights_<year> table in the processed DB using config weights and 
 """
 function step8b_build_product_weights(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     try
-        ProductWeightsFetch.build_product_weights_table_with_conn(
+        ProductWeightsBuilder.build_product_weights_table_with_conn(
             string(year);
             db_path_raw=config.source_db,
             conn_processed=target_conn

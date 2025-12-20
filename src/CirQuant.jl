@@ -22,7 +22,7 @@ include("DataFetch/ComextDataFetch.jl")
 include("DataTransform/CountryCodeMapper.jl")
 include("DataFetch/MaterialCompositionFetch.jl")
 include("DataFetch/MaterialRecyclingRatesFetch.jl")
-include("DataFetch/ProductWeightsFetch.jl")
+include("DataFetch/ProductWeightsBuilder.jl")
 include("DataFetch/ProductCollectionRatesFetch.jl")
 include("DataTransform/DataProcessor.jl")
 
@@ -33,7 +33,7 @@ using .ProdcomDataFetch
 using .ComextDataFetch
 using .MaterialCompositionFetch
 using .MaterialRecyclingRatesFetch
-using .ProductWeightsFetch
+using .ProductWeightsBuilder
 using .ProductCollectionRatesFetch
 using .CountryCodeMapper
 using .DataProcessor
@@ -200,7 +200,7 @@ Returns:
 """
 function fetch_product_weights_data(years_str::String="2002-2023")
     @info "Fetching product weights data for years $years_str"
-    return ProductWeightsFetch.fetch_product_weights_data(years_str; db_path=DB_PATH_RAW, processed_db_path=DB_PATH_PROCESSED)
+    return ProductWeightsBuilder.fetch_product_weights_data(years_str; db_path=DB_PATH_RAW, processed_db_path=DB_PATH_PROCESSED)
 end
 
 """

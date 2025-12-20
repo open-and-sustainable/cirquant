@@ -11,7 +11,7 @@ push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
 using Test
 using DataFrames
 using CirQuant
-using CirQuant.ProductWeightsFetch: compute_average_weights_from_df
+using CirQuant.ProductWeightsBuilder: compute_average_weights_from_df
 
 function mock_prodcom_data()
     n = 12

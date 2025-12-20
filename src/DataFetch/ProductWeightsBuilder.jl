@@ -1,4 +1,4 @@
-module ProductWeightsFetch
+module ProductWeightsBuilder
 
 using DataFrames, Dates, DuckDB, CSV, DBInterface
 using TOML
@@ -631,4 +631,4 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
     return true
 end
 
-end # module ProductWeightsFetch
+end # module ProductWeightsBuilder
