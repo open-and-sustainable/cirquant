@@ -89,7 +89,7 @@ function load_prodcom_quantity_data(db_path::String, year::Int, prodcom_codes::V
 end
 
 function load_comext_quantity_data(db_path::String, year::Int, hs_codes::Vector{String})
-    tables = ["comext_ds_059341_$(year)", "comext_ds_045409_$(year)"]
+    tables = ["comext_ds_059341_$(year)"]
     code_list = unique(hs_codes)
     dfs = DataFrame[]
 
@@ -108,7 +108,7 @@ function load_comext_quantity_data(db_path::String, year::Int, hs_codes::Vector{
         query = """
             SELECT time, product, reporter, indicators, value
             FROM \"$table_name\"
-            WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY', 'QUANTITY_IN_100KG', 'SUPPLEMENTARY_QUANTITY')$filter_clause
+            WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY')$filter_clause
         """
 
         db = DuckDB.DB(db_path)
@@ -250,9 +250,7 @@ function compute_comext_weights_from_df(comext_df::DataFrame, hs_to_prodcom_map:
         ind = uppercase(String(row.indicators))
         if ind == "QUANTITY_KG"
             mass_totals[key] = get(mass_totals, key, 0.0) + parsed_value
-        elseif ind == "QUANTITY_IN_100KG"
-            mass_totals[key] = get(mass_totals, key, 0.0) + parsed_value * 100.0
-        elseif ind == "SUP_QUANTITY" || ind == "SUPPLEMENTARY_QUANTITY"
+        elseif ind == "SUP_QUANTITY"
             count_totals[key] = get(count_totals, key, 0.0) + parsed_value
         end
     end
@@ -337,14 +335,6 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
 
     results_written = false
     default_weights = _default_weight_map()
-    cfg = TOML.parsefile(joinpath(@__DIR__, "..", "..", "config", "products.toml"))
-    products_cfg = get(cfg, "products", Dict{String,Any}())
-    product_cn8 = Dict{Int,Vector{String}}()
-    for (_, pdata) in products_cfg
-        pid = pdata["id"]
-        cn8_list = [replace(strip(string(c)), "." => "") for c in get(pdata, "cn8_codes", String[])]
-        product_cn8[pid] = cn8_list
-    end
     for year in start_year:end_year
         @info "Calculating product average weights for year $year"
         code_info = prodcom_codes_for_year(year)
@@ -359,8 +349,7 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
                 push!(hs_list, clean_code)
             end
         end
-        cn8_list = unique(vcat(values(product_cn8)...))
-        comext_df = load_comext_quantity_data(db_path, year, unique(vcat(hs_list, cn8_list)))
+        comext_df = load_comext_quantity_data(db_path, year, hs_list)
 
         weights_sources = DataFrame()
 
@@ -372,10 +361,6 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
                     for hs in split(String(row.hs_codes), ",")
                         clean_hs = replace(strip(hs), "." => "")
                         hs_to_prodcom[clean_hs] = String(row.prodcom_code_clean)
-                    end
-                    for cn8 in get(product_cn8, row.product_id, String[])
-                        clean_cn8 = replace(strip(cn8), "." => "")
-                        hs_to_prodcom[clean_cn8] = String(row.prodcom_code_clean)
                     end
                 end
             end

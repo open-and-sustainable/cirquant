@@ -18,7 +18,6 @@ description = "Codes used in the 2008 and later PRODCOM/EuroProMS datasets."
 id = 1
 name = "Heat pumps"
 hs_codes = ["8418.69"]
-cn8_codes = ["84186900"]
 
 [products.heat_pumps.prodcom_codes]
 legacy = ["28.21.13.30"]
@@ -35,7 +34,6 @@ nace_rev2 = ["28.25.13.80"]
 id = 2
 name = "PV panels"
 hs_codes = ["8541.43"]
-cn8_codes = ["85414300"]
 
 [products.pv_panels.prodcom_codes]
 legacy = ["27.11.40.00"]
@@ -51,7 +49,6 @@ potential_circularity_rate = 65.0
 id = 3
 name = "Printers"
 hs_codes = ["8443.31"]
-cn8_codes = ["84433100"]
 
 [products.printers.prodcom_codes]
 legacy = ["26.20.12.30"]
@@ -67,7 +64,6 @@ potential_circularity_rate = 40.0
 id = 4
 name = "ICT - Smartphones"
 hs_codes = ["8517.13"]
-cn8_codes = ["85171300"]
 
 [products.smartphones.prodcom_codes]
 legacy = ["26.20.11.30"]
@@ -83,7 +79,6 @@ potential_circularity_rate = 35.0
 id = 5
 name = "ICT - Other phones"
 hs_codes = ["8517.14"]
-cn8_codes = ["85171400"]
 
 [products.other_phones.prodcom_codes]
 legacy = ["26.20.11.50"]
@@ -99,7 +94,6 @@ potential_circularity_rate = 30.0
 id = 6
 name = "ICT - Portable computers"
 hs_codes = ["8471.30"]
-cn8_codes = ["84713000"]
 
 [products.portable_computers.prodcom_codes]
 legacy = ["26.20.13.00"]
@@ -115,7 +109,6 @@ potential_circularity_rate = 45.0
 id = 7
 name = "ICT - Other computers"
 hs_codes = ["8471.41", "8471.49"]
-cn8_codes = ["84714100", "84714900"]
 
 [products.other_computers.prodcom_codes]
 legacy = ["26.20.14.00"]
@@ -131,7 +124,6 @@ potential_circularity_rate = 45.0
 id = 8
 name = "ICT - Monitors, I/O units"
 hs_codes = ["8528.52", "8471.60"]
-cn8_codes = ["85285210", "85285291", "85285299", "84716060", "84716070"]
 
 [products.monitors_io.prodcom_codes]
 legacy = ["26.20.16.00"]
@@ -147,7 +139,6 @@ potential_circularity_rate = 50.0
 id = 9
 name = "ICT - Storage units"
 hs_codes = ["8471.70"]
-cn8_codes = ["84717020", "84717030", "84717050", "84717070", "84717080"]
 
 [products.storage_units.prodcom_codes]
 legacy = ["26.20.17.00"]
@@ -163,7 +154,6 @@ potential_circularity_rate = 40.0
 id = 10
 name = "ICT - Other units"
 hs_codes = ["8471.80"]
-cn8_codes = ["84718000"]
 
 [products.other_ict_units.prodcom_codes]
 legacy = ["26.20.18.00"]
@@ -179,7 +169,6 @@ potential_circularity_rate = 35.0
 id = 11
 name = "Full ICT (PRODCOM 26.20)"
 hs_codes = ["8517.13", "8517.14", "8471.30", "8471.41", "8471.49", "8528.52", "8471.60", "8471.70", "8471.80"]
-cn8_codes = ["85171300", "85171400", "84713000", "84714100", "84714900", "85285210", "85285291", "85285299", "84716060", "84716070", "84717020", "84717030", "84717050", "84717070", "84717080", "84718000"]
 
 [products.full_ict.prodcom_codes]
 legacy = ["26.20"]
@@ -195,7 +184,6 @@ potential_circularity_rate = 40.0
 id = 12
 name = "Batteries - Li-ion"
 hs_codes = ["8507.60"]
-cn8_codes = ["85076000"]
 
 [products.batteries_li_ion.prodcom_codes]
 legacy = ["27.20.23.00"]
@@ -211,7 +199,6 @@ potential_circularity_rate = 70.0
 id = 13
 name = "Batteries - Other"
 hs_codes = ["8507.10", "8507.20", "8507.50", "8507.80"]
-cn8_codes = ["85071020", "85071080", "85072020", "85072080", "85075000", "85078000"]
 
 [products.batteries_other.prodcom_codes]
 legacy = ["27.20.24.00"]
