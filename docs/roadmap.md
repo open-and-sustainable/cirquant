@@ -4,25 +4,27 @@ This document outlines the data needs and computation steps required to enhance 
 
 ## Data Development Needs
 
-### 1. Data-Driven Average Product Weights
+### 1. Product Weights and Derived Mass/Counts
 
-**Requirements:**
-- Average weight per unit for each product
-- Derived from PRODCOM quantity/value data
-- Annual data where available
-- By country if significant variations exist
-- Replace current hardcoded weights in config
+**Objective:** When data-driven weights cannot be computed from PRODCOM/COMEXT, use the configured `weight_kg` per product to derive missing quantities and store a consolidated view.
 
-**Potential Sources:**
-- Calculate from PRODCOM: total_tonnes / total_units
-- EU Energy Label database for validation
-- Industry association statistics
+**What to store (processed DB):**
+- `product_weights_YYYY` table with:
+  - `product_code`, `geo`, `year`
+  - `weight_kg_config` (from config/products.toml)
+  - `total_mass_tonnes` (derived if counts exist)
+  - `unit_counts` (derived if mass exists)
+  - `source` (config / derived / mixed)
 
-**Implementation:**
-- Raw database: Derived from existing PRODCOM tables
-- Processed database: `product_average_weights_YYYY`
-- Structure: Rows by product × geo
-- Computed during data processing from PRODCOM quantity/value ratios
+**Logic:**
+- If PRODCOM provides counts (e.g., QNTUNIT = pieces) but not mass, compute `total_mass_tonnes = unit_counts * weight_kg_config / 1000`.
+- If COMEXT provides mass (QUANTITY_KG) but not counts, compute `unit_counts = (mass_kg / weight_kg_config)`.
+- If both mass and counts exist, prefer observed values; use `weight_kg_config` for validation only.
+- If neither is present, store config weight with null mass/counts.
+
+**Notes:**
+- Keep HS/PRODCOM mappings unchanged; this is a processing/output change.
+- Does not attempt CN8 supplementary units.
 
 ### 2. Product Material Composition Data
 
