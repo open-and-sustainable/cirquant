@@ -4,6 +4,7 @@ using DataFrames
 using DuckDB, DBInterface
 using Dates
 using Dates: now, format
+using ..ProductWeightsFetch
 using ..DatabaseAccess
 using ..AnalysisConfigLoader
 using ..CountryCodeMapper
@@ -158,15 +159,15 @@ function process_year_complete(year::Int, config::ProcessingConfig)
         # Step 7: Calculate product aggregates
         step7_create_product_aggregates(year, config, target_conn)
 
-        # Step 8: Apply circularity parameters
-        # COMMENTED OUT - focusing on product/geo matching first
+    # Step 8: Apply circularity parameters
+    # COMMENTED OUT - focusing on product/geo matching first
     step8_apply_circularity_parameters(year, config, target_conn)
 
-        # Step 8b: Build product weights table using config weights and derived mass/counts
-        step8b_build_product_weights(year, config, target_conn)
+    # Step 8b: Build product weights table using config weights and derived mass/counts
+    step8b_build_product_weights(year, config, target_conn)
 
-        # Step 9: Clean up temporary tables
-        step9_cleanup_temp_tables(year, config, target_conn)
+    # Step 9: Clean up temporary tables
+    step9_cleanup_temp_tables(year, config, target_conn)
 
         # Close the connection properly
         DBInterface.close!(target_conn)
@@ -700,10 +701,10 @@ Build product_weights_<year> table in the processed DB using config weights and 
 """
 function step8b_build_product_weights(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     try
-        ProductWeightsFetch.build_product_weights_table(
+        ProductWeightsFetch.build_product_weights_table_with_conn(
             string(year);
             db_path_raw=config.source_db,
-            db_path_processed=config.target_db
+            conn_processed=target_conn
         )
     catch e
         @warn "Failed to build product_weights_$year" exception=e

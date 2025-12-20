@@ -114,7 +114,7 @@ function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=not
 
         # Step 2: Fetch COMEXT data
         @info "Step 2/6: Fetching COMEXT data..."
-        fetch_comext_data(years_str, comext_datasets)
+        fetch_comext_data(years_str; custom_datasets=comext_datasets)
         @info "COMEXT fetch completed."
 
         # Step 3: Fetch material composition data
