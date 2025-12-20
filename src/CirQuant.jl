@@ -166,22 +166,13 @@ function fetch_material_composition_data(years_str::String="2002-2023")
 end
 
 """
-    fetch_material_recycling_rates_data(years_str::String="2002-2023")
+    fetch_material_recycling_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW)
 
-Fetches material-specific recycling/recovery rates for each material type.
-This data is needed to calculate actual material recovery from recycling processes.
-Currently a stub - uses Eurostat env_wastrt dataset.
-
-Parameters:
-- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2023".
-
-Returns:
-- Nothing (stub implementation)
+Fetches material-specific recycling/recovery rates from env_wastrt via EurostatAPI.
 """
-function fetch_material_recycling_rates_data(years_str::String="2002-2023")
+function fetch_material_recycling_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW)
     @info "Fetching material recycling rates data for years $years_str"
-    return MaterialRecyclingRatesFetch.fetch_material_recycling_rates_data(years_str; db_path=DB_PATH_RAW)
+    return MaterialRecyclingRatesFetch.fetch_material_recycling_rates_data(years_str; db_path=db_path)
 end
 
 """
@@ -204,21 +195,15 @@ function fetch_product_weights_data(years_str::String="2002-2023")
 end
 
 """
-    fetch_product_collection_rates_data(years_str::String="2002-2023")
+    fetch_product_collection_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW, product_keys_filter=nothing)
 
-Fetches product collection rates showing what percentage of end-of-life products
-are collected for recycling. Currently a stub - uses Eurostat waste datasets.
-
-Parameters:
-- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2023".
-
-Returns:
-- Nothing (stub implementation)
+Fetches WEEE and battery collection datasets (env_waselee, env_waseleeos, env_waspb) via EurostatAPI.
+If `product_keys_filter` is provided, WEEE datasets are filtered to the configured `weee_waste_codes`
+for those products.
 """
-function fetch_product_collection_rates_data(years_str::String="2002-2023")
+function fetch_product_collection_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW, product_keys_filter=nothing)
     @info "Fetching product collection rates data for years $years_str"
-    return ProductCollectionRatesFetch.fetch_product_collection_rates_data(years_str; db_path=DB_PATH_RAW)
+    return ProductCollectionRatesFetch.fetch_product_collection_rates_data(years_str; db_path=db_path, product_keys_filter=product_keys_filter)
 end
 
 

@@ -31,6 +31,8 @@ echo
 
 julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; product_keys = filter(!isempty, split(\"$PRODUCT_KEYS\", \",\")); CirQuant.fetch_prodcom_data(\"$YEARS\"; db_path=\"$DB_PATH\", product_keys_filter=product_keys, parallel_years=$PARALLEL_YEARS, max_parallel_years=$MAX_PARALLEL_YEARS, rate_limit_seconds=$RATE_LIMIT_SECONDS, rate_limit_jitter=$RATE_LIMIT_JITTER)" 2>&1 | tee raw_test.log
 julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; product_keys = filter(!isempty, split(\"$PRODUCT_KEYS\", \",\")); CirQuant.fetch_comext_data(\"$YEARS\"; db_path=\"$DB_PATH\", product_keys_filter=product_keys)" 2>&1 | tee -a raw_test.log
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; product_keys = filter(!isempty, split(\"$PRODUCT_KEYS\", \",\")); CirQuant.fetch_material_recycling_rates_data(\"$YEARS\"; db_path=\"$DB_PATH\")" 2>&1 | tee -a raw_test.log
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; product_keys = filter(!isempty, split(\"$PRODUCT_KEYS\", \",\")); CirQuant.fetch_product_collection_rates_data(\"$YEARS\"; db_path=\"$DB_PATH\", product_keys_filter=product_keys)" 2>&1 | tee -a raw_test.log
 
 echo
 echo "Test fetch completed. Log saved to raw_test.log"
