@@ -105,7 +105,7 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
         hs_codes
     end
 
-    @info "Found $(length(code_list)) unique $(prefer_cn8 ? \"CN8\" : \"HS\") codes to fetch"
+    @info "Found $(length(code_list)) unique $(prefer_cn8 ? "CN8" : "HS") codes to fetch"
 
     # Track statistics
     stats = Dict(
