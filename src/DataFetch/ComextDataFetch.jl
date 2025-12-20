@@ -34,12 +34,12 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
     end
 
     # Fixed parameters
-    default_datasets = prefer_cn8 ? ["ds-059322"] : ["ds-059341"]
+    default_datasets = prefer_cn8 ? ["ds-045409"] : ["ds-059341"]
     datasets = isnothing(custom_datasets) ? default_datasets : custom_datasets
     freq = "A"  # Annual frequency
 
     # Define indicators (include supplementary quantity when available for unit counts)
-    indicators = ["VALUE_EUR", "QUANTITY_KG", "SUP_QUANTITY"]
+    indicators = prefer_cn8 ? ["QUANTITY_IN_100KG", "SUPPLEMENTARY_QUANTITY"] : ["QUANTITY_KG", "SUP_QUANTITY"]
 
     # Define partners (intra-EU and extra-EU)
     partners = Dict(

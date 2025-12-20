@@ -8,7 +8,7 @@ This note summarises every dataset currently (or soon to be) used by CirQuant an
 |--------|------|------------------|-----------|-------|
 | **PRODCOM** (Eurostat) | Production and limited trade indicators by PRODCOM code | `prodcom_ds_059358_YYYY`, `prodcom_ds_059359_YYYY` | 1995–present | DS-059358 (sold production/trade) fetched by default; DS-059359 (total production) optional |
 | **COMEXT** (Eurostat) | Trade flows by HS6 code (imports/exports, intra/extra EU) | `comext_ds_059341_YYYY` | 2002–present | Primary source for trade data |
-| **COMEXT CN8** (Eurostat) | Trade flows by CN8 code (imports/exports, intra/extra EU) with supplementary units | `comext_ds_059322_YYYY` | 2002–present | Needed to obtain supplementary (count) units when available |
+| **COMEXT CN8** (Eurostat) | Trade flows by CN8 code (imports/exports, intra/extra EU) with supplementary units | `comext_ds_045409_YYYY` | 2002–present | Needed to obtain supplementary (count) units when available; indicators: `QUANTITY_IN_100KG`, `SUPPLEMENTARY_QUANTITY` |
 | **Waste statistics** (Eurostat) | Collection rates for electronics/batteries | `env_waselee_YYYY`, `env_wasbat_YYYY` (planned) | Various | Integration pending |
 | **Waste treatment / material recovery** | Recovery efficiencies by material | `env_wastrt_YYYY` (planned) | Various | Provides recovery percentages |
 | **Material composition datasets** | Product bill-of-materials | `<dataset>_YYYY` (to be defined) | TBD | Under assessment (Ecodesign studies, PEF, LCA) |

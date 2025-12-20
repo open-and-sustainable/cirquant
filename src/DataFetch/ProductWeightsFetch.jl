@@ -89,7 +89,7 @@ function load_prodcom_quantity_data(db_path::String, year::Int, prodcom_codes::V
 end
 
 function load_comext_quantity_data(db_path::String, year::Int, hs_codes::Vector{String})
-    tables = ["comext_ds_059341_$(year)", "comext_ds_059322_$(year)"]
+    tables = ["comext_ds_059341_$(year)", "comext_ds_045409_$(year)"]
     code_list = unique(hs_codes)
     dfs = DataFrame[]
 
@@ -108,7 +108,7 @@ function load_comext_quantity_data(db_path::String, year::Int, hs_codes::Vector{
         query = """
             SELECT time, product, reporter, indicators, value
             FROM \"$table_name\"
-            WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY')$filter_clause
+            WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY', 'QUANTITY_IN_100KG', 'SUPPLEMENTARY_QUANTITY')$filter_clause
         """
 
         db = DuckDB.DB(db_path)
@@ -250,7 +250,9 @@ function compute_comext_weights_from_df(comext_df::DataFrame, hs_to_prodcom_map:
         ind = uppercase(String(row.indicators))
         if ind == "QUANTITY_KG"
             mass_totals[key] = get(mass_totals, key, 0.0) + parsed_value
-        elseif ind == "SUP_QUANTITY"
+        elseif ind == "QUANTITY_IN_100KG"
+            mass_totals[key] = get(mass_totals, key, 0.0) + parsed_value * 100.0
+        elseif ind == "SUP_QUANTITY" || ind == "SUPPLEMENTARY_QUANTITY"
             count_totals[key] = get(count_totals, key, 0.0) + parsed_value
         end
     end
