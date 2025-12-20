@@ -1,8 +1,9 @@
 module ProductWeightsFetch
 
 using DataFrames, Dates, DuckDB, CSV, DBInterface
+using TOML
 using ..DatabaseAccess: write_large_duckdb_table!, table_exists
-using ..AnalysisConfigLoader: prodcom_codes_for_year
+using ..AnalysisConfigLoader: prodcom_codes_for_year, load_product_mappings
 using ..CountryCodeMapper: harmonize_country_code
 
 export fetch_product_weights_data, compute_average_weights_from_df
@@ -74,6 +75,38 @@ function load_prodcom_quantity_data(db_path::String, year::Int, prodcom_codes::V
         SELECT time, prccode, reporter, indicators, value
         FROM \"$table_name\"
         WHERE indicators IN ('PRODQNT', 'QNTUNIT')$filter_clause
+    """
+
+    db = DuckDB.DB(db_path)
+    con = DBInterface.connect(db)
+    try
+        df = DataFrame(DuckDB.query(con, query))
+        return df
+    finally
+        DBInterface.close!(con)
+        DBInterface.close!(db)
+    end
+end
+
+function load_comext_quantity_data(db_path::String, year::Int, hs_codes::Vector{String})
+    table_name = "comext_ds_059341_$(year)"
+    if !table_exists(db_path, table_name)
+        @warn "COMEXT table $(table_name) not found in raw database, skipping year $(year)"
+        return DataFrame()
+    end
+
+    code_list = unique(hs_codes)
+    filter_clause = ""
+    if !isempty(code_list)
+        cleaned = [replace(code, "." => "") for code in code_list]
+        quoted = join(["'$(code)'" for code in cleaned], ",")
+        filter_clause = " AND product IN ($quoted)"
+    end
+
+    query = """
+        SELECT time, product, reporter, indicators, value
+        FROM \"$table_name\"
+        WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY')$filter_clause
     """
 
     db = DuckDB.DB(db_path)
@@ -189,6 +222,85 @@ function compute_average_weights_from_df(prodcom_df::DataFrame; year::Union{Noth
 end
 
 """
+    compute_comext_weights_from_df(comext_df, hs_to_prodcom_map)
+
+Compute kg-per-unit from COMEXT data where both net mass (kg) and supplementary counts are present.
+Returns a DataFrame keyed by prodcom_code, geo, year with derived average_weight_kg.
+"""
+function compute_comext_weights_from_df(comext_df::DataFrame, hs_to_prodcom_map::Dict{String,String})
+    required_columns = [:time, :product, :reporter, :indicators, :value]
+    missing_cols = setdiff(required_columns, Symbol.(names(comext_df)))
+    if !isempty(missing_cols)
+        error("DataFrame missing required COMEXT columns: $(missing_cols)")
+    end
+
+    mass_totals = Dict{Tuple{String,String,String},Float64}()   # (time, product, reporter) => kg
+    count_totals = Dict{Tuple{String,String,String},Float64}()  # (time, product, reporter) => count
+
+    for row in eachrow(comext_df)
+        key = (String(row.time), String(row.product), String(row.reporter))
+        parsed_value = parse_numeric_value(row.value)
+        parsed_value === nothing && continue
+
+        ind = uppercase(String(row.indicators))
+        if ind == "QUANTITY_KG"
+            mass_totals[key] = get(mass_totals, key, 0.0) + parsed_value
+        elseif ind == "SUP_QUANTITY"
+            count_totals[key] = get(count_totals, key, 0.0) + parsed_value
+        end
+    end
+
+    results = DataFrame(
+        time = String[],
+        prodcom_code = String[],
+        geo = String[],
+        average_weight_kg = Float64[],
+        tonnes_observed = Float64[],
+        units_observed = Float64[],
+        source = String[]
+    )
+
+    for (key, mass_kg) in mass_totals
+        count = get(count_totals, key, 0.0)
+        if count <= 0 || mass_kg <= 0
+            continue
+        end
+        hs_code = key[2]
+        prodcom_code = get(hs_to_prodcom_map, hs_code, nothing)
+        prodcom_code === nothing && continue
+
+        push!(results, (
+            time = key[1],
+            prodcom_code = prodcom_code,
+            geo = harmonize_country_code(key[3], :comext),
+            average_weight_kg = mass_kg / count,
+            tonnes_observed = mass_kg / 1000, # keep parallel metric for parity with prodcom result
+            units_observed = count,
+            source = "comext"
+        ))
+    end
+
+    return results
+end
+
+function _default_weight_map(config_path::String=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
+    cfg = TOML.parsefile(config_path)
+    products = get(cfg, "products", Dict{String,Any}())
+    defaults = Dict{String,Float64}()
+    for (_, pdata) in products
+        weight = get(get(pdata, "parameters", Dict{String,Any}()), "weight_kg", nothing)
+        codes = get(get(pdata, "prodcom_codes", Dict{String,Any}()), "nace_rev2", nothing)
+        if weight === nothing || codes === nothing
+            continue
+        end
+        for code in codes
+            defaults[replace(code, "." => "")] = Float64(weight)
+        end
+    end
+    return defaults
+end
+
+"""
     fetch_product_weights_data(years_range="2002-2023"; db_path::String)
 
 Calculates average product weights from PRODCOM quantity/value data.
@@ -217,34 +329,105 @@ function fetch_product_weights_data(years_range="2002-2023"; db_path::String, pr
     end
 
     results_written = false
+    default_weights = _default_weight_map()
     for year in start_year:end_year
         @info "Calculating product average weights for year $year"
         code_info = prodcom_codes_for_year(year)
+
         prodcom_df = load_prodcom_quantity_data(db_path, year, code_info.codes_original)
-        if nrow(prodcom_df) == 0
-            @warn "No PRODCOM quantity data found for year $year - skipping weight calculation"
-            continue
+        mapping_df = load_product_mappings()
+        hs_list = String[]
+        for hs_entry in unique(mapping_df.hs_codes)
+            for code in split(String(hs_entry), ",")
+                clean_code = replace(strip(code), "." => "")
+                isempty(clean_code) && continue
+                push!(hs_list, clean_code)
+            end
+        end
+        comext_df = load_comext_quantity_data(db_path, year, hs_list)
+
+        weights_sources = DataFrame()
+
+        if nrow(comext_df) > 0
+            # Build HS -> prodcom map (use year-appropriate prodcom codes)
+            hs_to_prodcom = Dict{String,String}()
+            for row in eachrow(mapping_df)
+                if row.epoch_start_year <= year <= row.epoch_end_year
+                    for hs in split(String(row.hs_codes), ",")
+                        clean_hs = replace(strip(hs), "." => "")
+                        hs_to_prodcom[clean_hs] = String(row.prodcom_code_clean)
+                    end
+                end
+            end
+            comext_weights = compute_comext_weights_from_df(comext_df, hs_to_prodcom)
+            if nrow(comext_weights) > 0
+                weights_sources = nrow(weights_sources) == 0 ? comext_weights : vcat(weights_sources, comext_weights, cols=:union)
+            end
         end
 
-        weights_df = compute_average_weights_from_df(prodcom_df; year=year)
-        if nrow(weights_df) == 0
+        if nrow(prodcom_df) > 0
+            prodcom_weights = compute_average_weights_from_df(prodcom_df; year=year)
+            if nrow(prodcom_weights) > 0
+                prodcom_weights[!, :source] .= "prodcom"
+                weights_sources = nrow(weights_sources) == 0 ? prodcom_weights : vcat(weights_sources, prodcom_weights, cols=:union)
+            end
+        end
+
+        # Add defaults for missing keys
+        combined = DataFrame(
+            product_code = String[],
+            geo = String[],
+            year = Int[],
+            average_weight_kg = Float64[],
+            tonnes_observed = Float64[],
+            units_observed = Float64[],
+            calculation_date = String[],
+            source = String[]
+        )
+
+        # prefer comext, then prodcom
+        key_seen = Set{Tuple{String,String}}()
+        if nrow(weights_sources) > 0
+            for row in eachrow(weights_sources)
+                key = (String(row.prodcom_code), String(row.geo))
+                push!(key_seen, key)
+                push!(combined, (
+                    product_code = String(row.prodcom_code),
+                    geo = String(row.geo),
+                    year = parse(Int, row.time),
+                    average_weight_kg = row.average_weight_kg,
+                    tonnes_observed = get(row, :tonnes_observed, 0.0),
+                    units_observed = get(row, :units_observed, 0.0),
+                    calculation_date = Dates.format(Dates.now(), dateformat"yyyy-mm-ddTHH:MM:SS"),
+                    source = get(row, :source, "unknown")
+                ))
+            end
+        end
+
+        # default fallback per product with EU-level geo
+        for code in code_info.codes_clean
+            key = (code, "EU27_2020")
+            if !(key in key_seen) && haskey(default_weights, code)
+                push!(combined, (
+                    product_code = code,
+                    geo = "EU27_2020",
+                    year = year,
+                    average_weight_kg = default_weights[code],
+                    tonnes_observed = 0.0,
+                    units_observed = 0.0,
+                    calculation_date = Dates.format(Dates.now(), dateformat"yyyy-mm-ddTHH:MM:SS"),
+                    source = "config_fallback"
+                ))
+            end
+        end
+
+        if nrow(combined) == 0
             @warn "Unable to derive product weights for year $year (missing tonnes or units data)"
             continue
         end
 
-        calculation_ts = Dates.format(Dates.now(), dateformat"yyyy-mm-ddTHH:MM:SS")
-        output_df = DataFrame(
-            product_code = weights_df.prodcom_code,
-            geo = weights_df.geo,
-            year = parse.(Int, weights_df.time),
-            average_weight_kg = weights_df.average_weight_kg,
-            tonnes_observed = weights_df.tonnes_observed,
-            units_observed = weights_df.units_observed,
-            calculation_date = fill(calculation_ts, nrow(weights_df))
-        )
-
         table_name = "product_average_weights_$(year)"
-        write_large_duckdb_table!(output_df, processed_db_path, table_name)
+        write_large_duckdb_table!(combined, processed_db_path, table_name)
         results_written = true
     end
 

@@ -1,5 +1,6 @@
 # CirQuant Product Configuration
 # All product definitions and parameters in one place
+# Note: weight_kg values in each product are fallback defaults, used only when no data-driven (per-year) weight can be derived.
 
 [prodcom_epochs.legacy]
 label = "Legacy PRODCOM (NACE Rev. 1.1)"
@@ -23,10 +24,11 @@ legacy = ["28.21.13.30"]
 nace_rev2 = ["28.25.13.80"]
 
 [products.heat_pumps.parameters]
-weight_kg = 100.0
-unit = "piece"
-current_circularity_rate = 5.0
-potential_circularity_rate = 45.0
+ # Fallback average unit weight (kg). Used only when no data-driven weight can be derived for a given year.
+ weight_kg = 100.0
+ unit = "piece"
+ current_circularity_rate = 5.0
+ potential_circularity_rate = 45.0
 
 [products.pv_panels]
 id = 2
