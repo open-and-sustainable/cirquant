@@ -612,137 +612,23 @@ function build_product_weights_table_with_conn(years_range="2002-2023"; db_path_
 end
 
 """
-    fetch_product_weights_data(years_range="2002-2023"; db_path::String)
+    fetch_product_weights_data(years_range="2002-2023"; db_path::String, processed_db_path::String=db_path)
 
-Calculates average product weights from PRODCOM quantity/value data.
-This replaces hardcoded weights in the configuration with data-driven values.
+Wrapper to populate `product_weights_YYYY` tables by combining config weights,
+PRODCOM counts (pieces), and COMEXT mass (kg). Delegates to
+`build_product_weights_table`.
 
 # Arguments
 - `years_range::String`: Year range to fetch (default: "2002-2023")
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
+- `processed_db_path::String`: Target processed DuckDB (defaults to `db_path`)
 
-# Notes
-- Derived from existing PRODCOM tables (not a new dataset)
-- Calculates: total_tonnes / total_units for each product
-- Data structure: Rows by product × geo
+# Returns
+- `true` once the tables are written.
 """
 function fetch_product_weights_data(years_range="2002-2023"; db_path::String, processed_db_path::String=db_path)
-    # Parse years
-    years = split(years_range, "-")
-    if length(years) == 1
-        start_year = parse(Int, years[1])
-        end_year = start_year
-    elseif length(years) == 2
-        start_year = parse(Int, years[1])
-        end_year = parse(Int, years[2])
-    else
-        error("Invalid years format. Use either 'YYYY' for a single year or 'YYYY-YYYY' for a range.")
-    end
-
-    results_written = false
-    default_weights = _default_weight_map()
-    for year in start_year:end_year
-        @info "Calculating product average weights for year $year"
-        code_info = prodcom_codes_for_year(year)
-
-        prodcom_df = load_prodcom_quantity_data(db_path, year, code_info.codes_original)
-        mapping_df = load_product_mappings()
-        hs_list = String[]
-        for hs_entry in unique(mapping_df.hs_codes)
-            for code in split(String(hs_entry), ",")
-                clean_code = replace(strip(code), "." => "")
-                isempty(clean_code) && continue
-                push!(hs_list, clean_code)
-            end
-        end
-        comext_df = load_comext_quantity_data(db_path, year, hs_list)
-
-        weights_sources = DataFrame()
-
-        if nrow(comext_df) > 0
-            # Build HS/CN8 -> prodcom map (use year-appropriate prodcom codes)
-            hs_to_prodcom = Dict{String,String}()
-            for row in eachrow(mapping_df)
-                if row.epoch_start_year <= year <= row.epoch_end_year
-                    for hs in split(String(row.hs_codes), ",")
-                        clean_hs = replace(strip(hs), "." => "")
-                        hs_to_prodcom[clean_hs] = String(row.prodcom_code_clean)
-                    end
-                end
-            end
-            comext_weights = compute_comext_weights_from_df(comext_df, hs_to_prodcom)
-            if nrow(comext_weights) > 0
-                weights_sources = nrow(weights_sources) == 0 ? comext_weights : vcat(weights_sources, comext_weights, cols=:union)
-            end
-        end
-
-        if nrow(prodcom_df) > 0
-            prodcom_weights = compute_average_weights_from_df(prodcom_df; year=year)
-            if nrow(prodcom_weights) > 0
-                prodcom_weights[!, :source] .= "prodcom"
-                weights_sources = nrow(weights_sources) == 0 ? prodcom_weights : vcat(weights_sources, prodcom_weights, cols=:union)
-            end
-        end
-
-        # Add defaults for missing keys
-        combined = DataFrame(
-            product_code = String[],
-            geo = String[],
-            year = Int[],
-            average_weight_kg = Float64[],
-            tonnes_observed = Float64[],
-            units_observed = Float64[],
-            calculation_date = String[],
-            source = String[]
-        )
-
-        # prefer comext, then prodcom
-        key_seen = Set{Tuple{String,String}}()
-        if nrow(weights_sources) > 0
-            for row in eachrow(weights_sources)
-                key = (String(row.prodcom_code), String(row.geo))
-                push!(key_seen, key)
-                push!(combined, (
-                    product_code = String(row.prodcom_code),
-                    geo = String(row.geo),
-                    year = parse(Int, row.time),
-                    average_weight_kg = row.average_weight_kg,
-                    tonnes_observed = get(row, :tonnes_observed, 0.0),
-                    units_observed = get(row, :units_observed, 0.0),
-                    calculation_date = Dates.format(Dates.now(), dateformat"yyyy-mm-ddTHH:MM:SS"),
-                    source = get(row, :source, "unknown")
-                ))
-            end
-        end
-
-        # default fallback per product with EU-level geo
-        for code in code_info.codes_clean
-            key = (code, "EU27_2020")
-            if !(key in key_seen) && haskey(default_weights, code)
-                push!(combined, (
-                    product_code = code,
-                    geo = "EU27_2020",
-                    year = year,
-                    average_weight_kg = default_weights[code],
-                    tonnes_observed = 0.0,
-                    units_observed = 0.0,
-                    calculation_date = Dates.format(Dates.now(), dateformat"yyyy-mm-ddTHH:MM:SS"),
-                    source = "config_fallback"
-                ))
-            end
-        end
-
-        if nrow(combined) == 0
-            @warn "Unable to derive product weights for year $year (missing tonnes or units data)"
-            continue
-        end
-
-        table_name = "product_average_weights_$(year)"
-        write_large_duckdb_table!(combined, processed_db_path, table_name)
-        results_written = true
-    end
-
-    return results_written
+    build_product_weights_table(years_range; db_path_raw=db_path, db_path_processed=processed_db_path)
+    return true
 end
 
 end # module ProductWeightsFetch

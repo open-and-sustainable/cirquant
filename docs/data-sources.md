@@ -11,7 +11,7 @@ This note summarises every dataset currently (or soon to be) used by CirQuant an
 | **Waste statistics** (Eurostat) | Collection rates for electronics/batteries | `env_waselee_YYYY`, `env_wasbat_YYYY` (planned) | Various | Integration pending |
 | **Waste treatment / material recovery** | Recovery efficiencies by material | `env_wastrt_YYYY` (planned) | Various | Provides recovery percentages |
 | **Material composition datasets** | Product bill-of-materials | `<dataset>_YYYY` (to be defined) | TBD | Under assessment (Ecodesign studies, PEF, LCA) |
-| **Derived weights** | Average mass per product | `product_average_weights_YYYY` (processed DB) | Derived annually | Computed from PRODCOM quantities/values |
+| **Derived weights** | Mass & counts per product | `product_weights_YYYY` (processed DB) | Derived annually | Combines config weights with PRODCOM counts and COMEXT mass |
 
 Only PRODCOM and COMEXT populate the raw DuckDB today; other sources will follow the same naming convention once integrated.
 
@@ -104,10 +104,14 @@ The following datasets extend the analysis but have not yet been loaded into the
 - **Content** – Product × material × mass share, potentially with year or technology differentiators.
 - **Use** – Enables weighted material recovery calculations in PRQL transformations.
 
-### 4.4 Derived average weights
+### 4.4 Derived weights and mass/count synthesis
 
-- **Method** – Compute `total_tonnes / total_units` using PRODCOM observations to populate `product_average_weights_YYYY`.
-- **Status** – Stored in the processed database; backfills missing `weight_kg` assumptions from the configuration.
+- **Method** – Build `product_weights_YYYY` in the processed database by merging:
+  - Config `weight_kg` per product (from `config/products.toml`)
+  - PRODCOM counts (`QNTUNIT` = pieces) to derive total mass (`count × weight`)
+  - COMEXT mass (`QUANTITY_KG`) to derive counts (`mass / weight`)
+  - If both are present, keep both and mark the source as `combined`; otherwise `prodcom_counts_config_mass`, `comext_mass_config_counts`, or `config`.
+- **Status** – Persisted in processed DuckDB after transformation; used to supply total mass or unit counts when one of the two is missing in raw sources.
 
 ## 5. Product scope and mappings
 
@@ -148,4 +152,4 @@ The raw DuckDB mirrors Eurostat responses (see `docs/database-schema-raw.md`). T
 - **Consistency** – one table per dataset-year combination.
 - **Extensibility** – future sources (waste statistics, material composition) will adopt the same naming convention so documentation remains valid.
 
-Processed tables (e.g., `product_material_composition_YYYY`, `material_recycling_rates_YYYY`, `product_collection_rates_YYYY`, `product_average_weights_YYYY`, `circularity_indicators_by_strategy_YYYY`) build on these inputs and are described in `docs/database-schema-processed.md`.
+Processed tables (e.g., `product_material_composition_YYYY`, `material_recycling_rates_YYYY`, `product_collection_rates_YYYY`, `product_weights_YYYY`, `circularity_indicators_by_strategy_YYYY`) build on these inputs and are described in `docs/database-schema-processed.md`.

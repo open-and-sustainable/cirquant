@@ -55,7 +55,7 @@ potential_circularity_rate = 45.0
 | Material composition | External studies / future datasets | `product_material_composition_YYYY` | Determines recoverable material mix |
 | Collection rates | Eurostat waste statistics | `product_collection_rates_YYYY` | Constrains recycling volumes |
 | Material recycling efficiencies | Waste treatment statistics | `material_recycling_rates_YYYY` | Applies material-specific recovery factors |
-| Average weights | Derived from PRODCOM | `product_average_weights_YYYY` | Backfills missing `weight_kg` or validates assumptions |
+| Average weights | Config + derivations | `product_weights_YYYY` | Stores config `weight_kg` and any derived mass/counts from PRODCOM/COMEXT |
 
 Only the first row is edited manually; the rest are fetched or calculated and written to DuckDB by the pipeline.
 

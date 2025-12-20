@@ -187,8 +187,9 @@ end
 """
     fetch_product_weights_data(years_str::String="2002-2023")
 
-Calculates average product weights from PRODCOM quantity/value data and writes
-`product_average_weights_YYYY` tables to the processed DuckDB database.
+Builds `product_weights_YYYY` tables in the processed DuckDB by combining
+config weights with PRODCOM counts (pieces) and COMEXT mass (kg) to derive
+total mass and/or unit counts per product, geo, and year.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
