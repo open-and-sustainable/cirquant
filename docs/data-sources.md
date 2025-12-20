@@ -152,4 +152,4 @@ The raw DuckDB mirrors Eurostat responses (see `docs/database-schema-raw.md`). T
 - **Consistency** – one table per dataset-year combination.
 - **Extensibility** – future sources (waste statistics, material composition) will adopt the same naming convention so documentation remains valid.
 
-Processed tables (e.g., `product_material_composition_YYYY`, `material_recycling_rates_YYYY`, `product_collection_rates_YYYY`, `product_weights_YYYY`, `circularity_indicators_by_strategy_YYYY`) build on these inputs and are described in `docs/database-schema-processed.md`.
+Processed tables (e.g., `product_material_composition_YYYY`, `material_recycling_rates_YYYY`, `product_collection_rates_YYYY`, `product_weights_YYYY`, `product_unit_values_YYYY`, `circularity_indicators_by_strategy_YYYY`) build on these inputs and are described in `docs/database-schema-processed.md`.

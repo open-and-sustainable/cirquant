@@ -23,6 +23,7 @@ const PRQL_DIR = joinpath(@__DIR__, "prql")
 const CIRCULARITY_TABLE_PREFIX = "circularity_indicators_"
 const COUNTRY_AGGREGATES_PREFIX = "country_aggregates_"
 const PRODUCT_AGGREGATES_PREFIX = "product_aggregates_"
+const PRODUCT_UNIT_VALUES_PREFIX = "product_unit_values_"
 const ANALYSIS_PARAMS_TABLE = "analysis_parameters"
 
 """
@@ -165,6 +166,9 @@ function process_year_complete(year::Int, config::ProcessingConfig)
 
     # Step 8b: Build product weights table using config weights and derived mass/counts
     step8b_build_product_weights(year, config, target_conn)
+
+    # Step 8c: Build unit value table (EUR per unit/kg) using product weights and trade/production values
+    step8c_build_unit_values(year, config, target_conn)
 
     # Step 9: Clean up temporary tables
     step9_cleanup_temp_tables(year, config, target_conn)
@@ -697,7 +701,7 @@ end
 """
     step8b_build_product_weights(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
-Build product_weights_<year> table in the processed DB using config weights and derived mass/counts.
+    Build product_weights_<year> table in the processed DB using config weights and derived mass/counts.
 """
 function step8b_build_product_weights(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
     try
@@ -709,6 +713,123 @@ function step8b_build_product_weights(year::Int, config::ProcessingConfig, targe
     catch e
         @warn "Failed to build product_weights_$year" exception=e
     end
+end
+
+"""
+    step8c_build_unit_values(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+
+Build `product_unit_values_<year>` using existing processed tables:
+- Pull production/import/export values and masses from `production_trade_<year>`
+- Pull weights and any observed/derived counts from `product_weights_<year>`
+- Compute value per kg and value per unit (preferring observed counts; otherwise derive counts from weight and mass)
+"""
+function step8c_build_unit_values(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 8c: Building unit value table for $year..."
+    pt_table = "production_trade_$(year)"
+    weights_table = "product_weights_$(year)"
+
+    if !DatabaseAccess.table_exists(config.target_db, pt_table)
+        @warn "Cannot build unit values: missing $pt_table"
+        return
+    end
+    if !DatabaseAccess.table_exists(config.target_db, weights_table)
+        @warn "Cannot build unit values: missing $weights_table"
+        return
+    end
+
+    # Helpers
+    _to_float(x) = x === missing ? nothing :
+                   x isa Number ? Float64(x) :
+                   try parse(Float64, replace(string(x), "," => "")) catch; nothing end
+
+    # Load data
+    pt_df = DataFrame(DBInterface.execute(target_conn, """
+        SELECT product_code, geo,
+               production_value_eur, production_volume_tonnes,
+               import_value_eur, import_volume_tonnes,
+               export_value_eur, export_volume_tonnes
+        FROM "$pt_table"
+    """))
+
+    weights_df = DataFrame(DBInterface.execute(target_conn, """
+        SELECT product_code, geo, weight_kg_config, unit_counts
+        FROM "$weights_table"
+    """))
+
+    weights_lookup = Dict{Tuple{String,String},NamedTuple{(:weight_kg, :unit_counts),Tuple{Float64,Union{Missing,Float64}}}}()
+    for row in eachrow(weights_df)
+        weights_lookup[(String(row.product_code), String(row.geo))] =
+            (Float64(row.weight_kg_config), row.unit_counts)
+    end
+
+    flows = [
+        (:production_value_eur, :production_volume_tonnes, "production"),
+        (:import_value_eur, :import_volume_tonnes, "import"),
+        (:export_value_eur, :export_volume_tonnes, "export")
+    ]
+
+    result = DataFrame(
+        product_code = String[],
+        geo = String[],
+        year = Int[],
+        flow = String[],
+        value_eur = Union{Float64,Missing}[],
+        mass_tonnes = Union{Float64,Missing}[],
+        unit_counts = Union{Float64,Missing}[],
+        value_per_unit_eur = Union{Float64,Missing}[],
+        value_per_kg_eur = Union{Float64,Missing}[],
+        source = String[]
+    )
+
+    for row in eachrow(pt_df)
+        key = (String(row.product_code), String(row.geo))
+        weight_info = get(weights_lookup, key, get(weights_lookup, (key[1], "EU27_2020"), (0.0, missing)))
+        weight = weight_info.weight_kg
+        counts_hint = weight_info.unit_counts
+
+        for (val_sym, mass_sym, flow_label) in flows
+            value = _to_float(row[val_sym])
+            mass_tonnes = _to_float(row[mass_sym])
+
+            # Skip rows with no monetary value
+            if value === nothing
+                continue
+            end
+
+            counts = counts_hint
+            source = "value_only"
+
+            if counts !== missing && counts !== nothing && counts > 0
+                source = "counts_from_product_weights"
+            elseif mass_tonnes !== nothing && mass_tonnes > 0 && weight > 0
+                counts = mass_tonnes * 1000.0 / weight
+                source = "derived_from_weight"
+            elseif mass_tonnes !== nothing && mass_tonnes > 0
+                source = "mass_only"
+            end
+
+            value_per_unit = (value !== nothing && counts !== nothing && counts !== missing && counts > 0) ?
+                             value / counts : missing
+            value_per_kg = (value !== nothing && mass_tonnes !== nothing && mass_tonnes > 0) ?
+                           value / (mass_tonnes * 1000.0) : missing
+
+            push!(result, (
+                product_code = key[1],
+                geo = key[2],
+                year = year,
+                flow = flow_label,
+                value_eur = value === nothing ? missing : value,
+                mass_tonnes = mass_tonnes === nothing ? missing : mass_tonnes,
+                unit_counts = counts === nothing ? missing : counts,
+                value_per_unit_eur = value_per_unit,
+                value_per_kg_eur = value_per_kg,
+                source = source
+            ))
+        end
+    end
+
+    table_name = "$(PRODUCT_UNIT_VALUES_PREFIX)$(year)"
+    DatabaseAccess.write_duckdb_table_with_connection!(result, target_conn, table_name)
 end
 
 """
@@ -928,6 +1049,7 @@ export ProcessingConfig,
     step7_create_product_aggregates,
     step8_apply_circularity_parameters,
     step8b_build_product_weights,
+    step8c_build_unit_values,
     step9_cleanup_temp_tables
 
 end # module DataProcessor

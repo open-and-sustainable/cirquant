@@ -14,6 +14,7 @@ These tables remain in the database after processing:
 - `production_trade_YYYY` - Combined production and trade data with PRODCOM fallback
 - `country_aggregates_YYYY` - Pre-calculated country-level aggregates
 - `product_aggregates_YYYY` - Pre-calculated product-level EU aggregates
+- `product_unit_values_YYYY` - EUR per kg / per unit by flow using product weights and values
 - `country_code_mapping` - PRODCOM to ISO country code mappings
 - `parameters_circularity_rate` - Product-specific circularity parameters
 - `product_mapping_codes` - PRODCOM to HS code mappings
@@ -148,6 +149,23 @@ Config weights combined with any observed/derived mass and counts.
 | total_mass_tonnes | DOUBLE | Mass derived or observed (tonnes); may be missing if not derivable |
 | unit_counts | DOUBLE | Unit counts observed or derived; may be missing if not derivable |
 | source | VARCHAR | How the row was built (`prodcom_counts_config_mass`, `comext_mass_config_counts`, `combined`, `config`) |
+
+### Table: `product_unit_values_YYYY`
+
+Value-per-unit and value-per-kg metrics for production, imports, and exports using processed values plus product weights.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots |
+| geo | VARCHAR | ISO 2-letter country code |
+| year | INTEGER | Reference year |
+| flow | VARCHAR | One of `production`, `import`, `export` |
+| value_eur | DOUBLE | Monetary value for the flow |
+| mass_tonnes | DOUBLE | Mass for the flow (tonnes) |
+| unit_counts | DOUBLE | Unit counts (observed from product_weights or derived via weight) |
+| value_per_unit_eur | DOUBLE | EUR per unit (value / unit_counts) |
+| value_per_kg_eur | DOUBLE | EUR per kg (value / mass_kg) |
+| source | VARCHAR | How counts were obtained (`counts_from_product_weights`, `derived_from_weight`, `mass_only`, `value_only`) |
 
 ## Parameter Tables
 
