@@ -6,7 +6,7 @@ using ..DatabaseAccess: write_large_duckdb_table!, table_exists
 using ..AnalysisConfigLoader: prodcom_codes_for_year, load_product_mappings
 using ..CountryCodeMapper: harmonize_country_code
 
-export fetch_product_weights_data, compute_average_weights_from_df
+export fetch_product_weights_data, compute_average_weights_from_df, build_product_weights_table
 
 const MASS_UNIT_FACTORS = Dict(
     "t" => 1.0,
@@ -301,6 +301,173 @@ function _default_weight_map(config_path::String=joinpath(@__DIR__, "..", "..", 
         end
     end
     return defaults
+end
+
+"""
+    build_product_weights_table(years_range="2002-2023"; db_path_raw::String, db_path_processed::String, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
+
+Create a processed table `product_weights_YYYY` containing config weights and derived mass/counts per product/geo/year.
+Derivation rules:
+- If PRODCOM provides counts (QNTUNIT pieces) and config weight is available, derive total_mass_tonnes = counts * weight / 1000.
+- If COMEXT provides mass (QUANTITY_KG) and config weight is available, derive unit_counts = mass_kg / weight.
+- If both exist, keep both and mark source as "combined".
+- If neither exists, store config weight with null mass/counts and source "config".
+"""
+function build_product_weights_table(years_range="2002-2023"; db_path_raw::String, db_path_processed::String, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
+    # Parse years
+    years = split(years_range, "-")
+    if length(years) == 1
+        start_year = parse(Int, years[1])
+        end_year = start_year
+    elseif length(years) == 2
+        start_year = parse(Int, years[1])
+        end_year = parse(Int, years[2])
+    else
+        error("Invalid years format. Use 'YYYY' or 'YYYY-YYYY'.")
+    end
+
+    # Config weights
+    cfg = TOML.parsefile(config_path)
+    products_cfg = get(cfg, "products", Dict{String,Any}())
+    weight_map = Dict{String,Float64}()
+    for (_, pdata) in products_cfg
+        weight = get(get(pdata, "parameters", Dict{String,Any}()), "weight_kg", nothing)
+        prodcom_sets = get(get(pdata, "prodcom_codes", Dict{String,Any}()), "nace_rev2", String[])
+        if weight === nothing
+            continue
+        end
+        for code in prodcom_sets
+            weight_map[replace(code, "." => "")] = Float64(weight)
+        end
+    end
+
+    # HS -> prodcom mapping
+    mapping_df = load_product_mappings()
+    hs_to_prodcom = Dict{String,String}()
+    for row in eachrow(mapping_df)
+        for hs in split(String(row.hs_codes), ",")
+            clean_hs = replace(strip(hs), "." => "")
+            isempty(clean_hs) && continue
+            hs_to_prodcom[clean_hs] = String(row.prodcom_code_clean)
+        end
+    end
+
+    # Helper to parse numbers safely
+    function _parse_float(x)
+        try
+            return parse(Float64, replace(string(x), "," => ""))
+        catch
+            return nothing
+        end
+    end
+
+    # Allowed piece units
+    piece_units = COUNT_UNITS
+
+    for year in start_year:end_year
+        # PRODCOM counts
+        prodcom_counts = Dict{Tuple{String,String},Float64}() # (geo, prodcom) => counts
+        prod_table = "prodcom_ds_059358_$(year)"
+        if table_exists(db_path_raw, prod_table)
+            db = DuckDB.DB(db_path_raw)
+            con = DBInterface.connect(db)
+            q_units = DataFrame(DuckDB.query(con, """
+                SELECT reporter, prccode, value FROM "$prod_table" WHERE indicators = 'QNTUNIT'
+            """))
+            unit_lookup = Dict{Tuple{String,String},String}()
+            for row in eachrow(q_units)
+                unit_lookup[(String(row.reporter), String(row.prccode))] = lowercase(strip(String(row.value)))
+            end
+            q_counts = DataFrame(DuckDB.query(con, """
+                SELECT reporter, prccode, value FROM "$prod_table" WHERE indicators = 'PRODQNT'
+            """))
+            for row in eachrow(q_counts)
+                key = (String(row.reporter), String(row.prccode))
+                unit = get(unit_lookup, key, nothing)
+                unit === nothing && continue
+                lowercase(unit) in piece_units || continue
+                val = _parse_float(row.value)
+                val === nothing && continue
+                prodcom_counts[key] = get(prodcom_counts, key, 0.0) + val
+            end
+            DBInterface.close!(con); DBInterface.close!(db)
+        end
+
+        # COMEXT mass
+        comext_mass = Dict{Tuple{String,String},Float64}() # (geo, prodcom) => kg
+        com_table = "comext_ds_059341_$(year)"
+        if table_exists(db_path_raw, com_table)
+            db = DuckDB.DB(db_path_raw)
+            con = DBInterface.connect(db)
+            q_mass = DataFrame(DuckDB.query(con, """
+                SELECT reporter, product, value FROM "$com_table" WHERE indicators = 'QUANTITY_KG'
+            """))
+            for row in eachrow(q_mass)
+                hs = replace(strip(String(row.product)), "." => "")
+                prod = get(hs_to_prodcom, hs, nothing)
+                prod === nothing && continue
+                val = _parse_float(row.value)
+                val === nothing && continue
+                key = (String(row.reporter), prod)
+                comext_mass[key] = get(comext_mass, key, 0.0) + val
+            end
+            DBInterface.close!(con); DBInterface.close!(db)
+        end
+
+        # Build rows
+        result = DataFrame(
+            product_code = String[],
+            geo = String[],
+            year = Int[],
+            weight_kg_config = Float64[],
+            total_mass_tonnes = Union{Float64,Missing}[],
+            unit_counts = Union{Float64,Missing}[],
+            source = String[]
+        )
+
+        keys_set = union(collect(keys(prodcom_counts)), collect(keys(comext_mass)))
+        for key in keys_set
+            geo, prod = key
+            weight = get(weight_map, prod, nothing)
+            counts = get(prodcom_counts, key, 0.0)
+            mass_kg = get(comext_mass, key, 0.0)
+            total_mass_tonnes = missing
+            unit_counts = missing
+            src = "config"
+
+            if counts > 0 && weight !== nothing
+                total_mass_tonnes = counts * weight / 1000
+                unit_counts = counts
+                src = "prodcom_counts_config_mass"
+            end
+
+            if mass_kg > 0
+                mass_t = mass_kg / 1000
+                if total_mass_tonnes === missing
+                    total_mass_tonnes = mass_t
+                end
+                if weight !== nothing && (unit_counts === missing || unit_counts == 0)
+                    unit_counts = mass_kg / weight
+                    src = "comext_mass_config_counts"
+                elseif unit_counts !== missing
+                    src = "combined"
+                end
+            end
+
+            push!(result, (
+                product_code = prod,
+                geo = geo,
+                year = year,
+                weight_kg_config = weight === nothing ? 0.0 : weight,
+                total_mass_tonnes = total_mass_tonnes,
+                unit_counts = unit_counts,
+                source = src
+            ))
+        end
+
+        table_name = "product_weights_$(year)"
+        write_large_duckdb_table!(result, db_path_processed, table_name)
+    end
 end
 
 """

@@ -160,7 +160,10 @@ function process_year_complete(year::Int, config::ProcessingConfig)
 
         # Step 8: Apply circularity parameters
         # COMMENTED OUT - focusing on product/geo matching first
-        step8_apply_circularity_parameters(year, config, target_conn)
+    step8_apply_circularity_parameters(year, config, target_conn)
+
+        # Step 8b: Build product weights table using config weights and derived mass/counts
+        step8b_build_product_weights(year, config, target_conn)
 
         # Step 9: Clean up temporary tables
         step9_cleanup_temp_tables(year, config, target_conn)
@@ -691,6 +694,23 @@ function step8_apply_circularity_parameters(year::Int, config::ProcessingConfig,
 end
 
 """
+    step8b_build_product_weights(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+
+Build product_weights_<year> table in the processed DB using config weights and derived mass/counts.
+"""
+function step8b_build_product_weights(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    try
+        ProductWeightsFetch.build_product_weights_table(
+            string(year);
+            db_path_raw=config.source_db,
+            db_path_processed=config.target_db
+        )
+    catch e
+        @warn "Failed to build product_weights_$year" exception=e
+    end
+end
+
+"""
     step9_cleanup_temp_tables(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 9: Clean up temporary tables created during processing.
@@ -906,6 +926,7 @@ export ProcessingConfig,
     step6_create_country_aggregates,
     step7_create_product_aggregates,
     step8_apply_circularity_parameters,
+    step8b_build_product_weights,
     step9_cleanup_temp_tables
 
 end # module DataProcessor

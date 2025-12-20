@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# process_test_data.sh
+# transform_test.sh
 # Transform the raw test DuckDB into processed test outputs.
 # Uses the test raw DB (CirQuant-database/raw/test.duckdb) and writes to test_processed.duckdb.
 #
 # Usage:
-#   ./process_test_data.sh [YEARS]
+#   ./transform_test.sh [YEARS]
 #
 # Example:
-#   ./process_test_data.sh "2022-2023"
+#   ./transform_test.sh "2022-2023"
 
 YEARS=${1:-"2022-2023"}
 RAW_DB="CirQuant-database/raw/test.duckdb"
@@ -24,7 +24,7 @@ echo
 mkdir -p "$(dirname "$PROCESSED_DB")"
 
 # Run processing using test DB paths
-julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.process_data(\"$YEARS\"; db_path_raw=\"$RAW_DB\", db_path_processed=\"$PROCESSED_DB\")" 2>&1 | tee process_test.log
+julia --project=. -e "push!(LOAD_PATH, \"src\"); using CirQuant; CirQuant.process_data(\"$YEARS\"; source_db=\"$RAW_DB\", target_db=\"$PROCESSED_DB\")" 2>&1 | tee process_test.log
 
 echo
 echo "Test processing completed. Log saved to process_test.log"
