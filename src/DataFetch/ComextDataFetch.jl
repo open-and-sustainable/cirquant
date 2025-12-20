@@ -38,8 +38,8 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
     datasets = isnothing(custom_datasets) ? default_datasets : custom_datasets
     freq = "A"  # Annual frequency
 
-    # Define indicators (include supplementary quantity when available for unit counts)
-    indicators = ["QUANTITY_KG", "SUP_QUANTITY"]
+    # Define indicators (trade value and net mass)
+    indicators = ["VALUE_EUR", "QUANTITY_KG"]
 
     # Define partners (intra-EU and extra-EU)
     partners = Dict(

@@ -108,7 +108,7 @@ function load_comext_quantity_data(db_path::String, year::Int, hs_codes::Vector{
         query = """
             SELECT time, product, reporter, indicators, value
             FROM \"$table_name\"
-            WHERE indicators IN ('QUANTITY_KG', 'SUP_QUANTITY')$filter_clause
+            WHERE indicators IN ('QUANTITY_KG')$filter_clause
         """
 
         db = DuckDB.DB(db_path)
@@ -250,8 +250,6 @@ function compute_comext_weights_from_df(comext_df::DataFrame, hs_to_prodcom_map:
         ind = uppercase(String(row.indicators))
         if ind == "QUANTITY_KG"
             mass_totals[key] = get(mass_totals, key, 0.0) + parsed_value
-        elseif ind == "SUP_QUANTITY"
-            count_totals[key] = get(count_totals, key, 0.0) + parsed_value
         end
     end
 
