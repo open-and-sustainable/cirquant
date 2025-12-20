@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "f4591dde3d62a21b497c06c561057b6bf43f6295"
+project_hash = "104f955dfcb5f510d05ed9bff3c452d34b2c1c21"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -157,6 +157,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "f87462fd13dc1f48ba1d94531b460ff6801e43f9"
 uuid = "2cbbab25-fc8b-58cf-88d4-687a02676033"
 version = "1.4.3+0"
+
+[[deps.EurostatAPI]]
+deps = ["DataFrames", "Dates", "Documenter", "HTTP", "JSON3", "Test"]
+git-tree-sha1 = "c3790c0adc26cd8cf19854a97401024c64bac66c"
+uuid = "02046693-67e8-41a9-896c-149a4e38bbca"
+version = "0.0.2"
 
 [[deps.ExceptionUnwrapping]]
 deps = ["Test"]
