@@ -137,6 +137,8 @@ function fetch_prodcom_data(
                 combined_df = DataFrame()
                 @info "Fetching $dataset for year $year with indicators: $indicators (sources: $sources)"
 
+                unsupported_dataset = false
+
                 for indicator in indicators
                     indicator_df = nothing
                     source_used = nothing
@@ -158,8 +160,20 @@ function fetch_prodcom_data(
                         end
                     end
 
-                    if isnothing(indicator_df)
+                    if isnothing(indicator_df) || nrow(indicator_df) == 0
                         @warn "No data returned for $dataset, year $year, indicator $indicator after trying sources $sources"
+                        if dataset in ["ds-059358", "ds-059359"]
+                            unsupported_dataset = true
+                            break
+                        end
+                        continue
+                    end
+                    if !(:prccode in propertynames(indicator_df))
+                        @warn "No prccode column in response for $dataset, year $year, indicator $indicator; skipping"
+                        if dataset in ["ds-059358", "ds-059359"]
+                            unsupported_dataset = true
+                            break
+                        end
                         continue
                     end
                     try
@@ -182,6 +196,15 @@ function fetch_prodcom_data(
                     catch e
                         @warn "Failed to process indicator $indicator for $dataset, year $year (source used: $source_used)" exception = e
                     end
+
+                    if unsupported_dataset
+                        break
+                    end
+                end
+
+                if unsupported_dataset
+                    @error "$dataset appears unsupported by current ProdcomAPI (missing data/prccode); skipping year $year"
+                    return year_stats
                 end
 
                 if nrow(combined_df) == 0
