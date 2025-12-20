@@ -135,71 +135,89 @@ function fetch_prodcom_data(
                 @info "Focusing on $(length(prodcom_code_set)) PRODCOM codes for year $year"
 
                 combined_df = DataFrame()
-                @info "Fetching $dataset for year $year with indicators: $indicators (sources: $sources)"
+                @info "Fetching $dataset for year $year with indicators: $indicators (sources: $sources, products=$(length(prodcom_code_set)))"
 
                 unsupported_dataset = false
 
                 for indicator in indicators
-                    indicator_df = nothing
-                    source_used = nothing
+                    indicator_combined = DataFrame()
+                    for code in prodcom_code_set
+                        code_df = nothing
+                        source_used = nothing
 
-                    for source in sources
-                        if rate_limiter !== nothing
-                            throttle!(rate_limiter)
+                        for source in sources
+                            if rate_limiter !== nothing
+                                throttle!(rate_limiter)
+                            end
+
+                            try
+                                code_df = ProdcomAPI.fetch_prodcom_data(
+                                    dataset, year, indicator;
+                                    verbose=false, source=source, prccode=code
+                                )
+                                source_used = source
+                                break
+                            catch e
+                                @warn "Failed to fetch indicator $indicator for $dataset, year $year, code $code with source $source" exception = e
+                            end
                         end
 
-                        try
-                            indicator_df = ProdcomAPI.fetch_prodcom_data(
-                                dataset, year, indicator;
-                                verbose=false, source=source
-                            )
-                            source_used = source
-                            break
-                        catch e
-                            @warn "Failed to fetch indicator $indicator for $dataset, year $year with source $source" exception = e
-                        end
-                    end
-
-                    if isnothing(indicator_df) || nrow(indicator_df) == 0
-                        @warn "No data returned for $dataset, year $year, indicator $indicator after trying sources $sources"
-                        if dataset in ["ds-059358", "ds-059359"]
-                            unsupported_dataset = true
-                            break
-                        end
-                        continue
-                    end
-                    if !(:prccode in propertynames(indicator_df))
-                        @warn "No prccode column in response for $dataset, year $year, indicator $indicator; skipping"
-                        if dataset in ["ds-059358", "ds-059359"]
-                            unsupported_dataset = true
-                            break
-                        end
-                        continue
-                    end
-                    try
-                        indicator_df[!, :prccode] = string.(indicator_df.prccode)
-                        mask = in.(indicator_df.prccode, Ref(prodcom_code_set))
-                        filtered_df = indicator_df[mask, :]
-
-                        if nrow(filtered_df) == 0
-                            @info "No matching PRODCOM codes found for indicator $indicator"
+                        if isnothing(code_df) || nrow(code_df) == 0
+                            @info "No data returned for $dataset, year $year, indicator $indicator, code $code after trying sources $sources"
                             continue
                         end
-
-                        filtered_df[!, :prodcom_code_original] = [prodcom_code_map[code] for code in filtered_df.prccode]
-
-                        if :value in propertynames(filtered_df)
-                            filtered_df[!, :value] = string.(filtered_df.value)
+                        code_column = if :prccode in propertynames(code_df)
+                            :prccode
+                        elseif :product in propertynames(code_df)
+                            :product
+                        else
+                            nothing
                         end
 
-                        combined_df = nrow(combined_df) == 0 ? filtered_df : vcat(combined_df, filtered_df, cols=:union)
-                    catch e
-                        @warn "Failed to process indicator $indicator for $dataset, year $year (source used: $source_used)" exception = e
+                        if code_column === nothing
+                            @warn "No product/prccode column in response for $dataset, year $year, indicator $indicator, code $code; skipping"
+                            if dataset in ["ds-059358", "ds-059359"]
+                                unsupported_dataset = true
+                                break
+                            end
+                            continue
+                        end
+                        try
+                            code_df[!, :prccode] = string.(code_df[!, code_column])
+                            mask = code_df.prccode .== code
+                            filtered_df = code_df[mask, :]
+
+                            if nrow(filtered_df) == 0
+                                @info "No matching rows after filtering for code $code on indicator $indicator"
+                                continue
+                            end
+
+                            filtered_df[!, :prodcom_code_original] = [prodcom_code_map[c] for c in filtered_df.prccode]
+
+                            if :value in propertynames(filtered_df)
+                                filtered_df[!, :value] = string.(filtered_df.value)
+                            end
+
+                            indicator_combined = nrow(indicator_combined) == 0 ? filtered_df : vcat(indicator_combined, filtered_df, cols=:union)
+                        catch e
+                            @warn "Failed to process indicator $indicator for $dataset, year $year, code $code (source used: $source_used)" exception = e
+                        end
+
+                        if unsupported_dataset
+                            break
+                        end
                     end
 
                     if unsupported_dataset
                         break
                     end
+
+                    if nrow(indicator_combined) == 0
+                        @warn "No data received for $dataset, year $year, indicator $indicator across requested codes"
+                        continue
+                    end
+
+                    combined_df = nrow(combined_df) == 0 ? indicator_combined : vcat(combined_df, indicator_combined, cols=:union)
                 end
 
                 if unsupported_dataset
