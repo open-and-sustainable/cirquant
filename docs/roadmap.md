@@ -62,15 +62,6 @@ This document outlines the data needs and computation steps required to enhance 
 - Structure: Rows by product × geo
 - Fetched from Eurostat waste datasets where available
 
-### 4. Product-Specific Unit Values
-
-**Requirements:**
-- EUR per kg and per unit for each product/geo/year and flow (production, imports, exports)
-- Derived from existing processed data: production/import/export values plus masses/counts
-
-**Implementation:**
-- Calculated during processing from `production_trade_YYYY` (values + tonnes) and `product_weights_YYYY` (weights + counts) to populate `product_unit_values_YYYY`
-
 ## Computation Steps to Implement
 
 ### Step 1: Calculate Material-Weighted Recovery Rates
