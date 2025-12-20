@@ -1,6 +1,7 @@
 module ComextDataFetch
 
-using DataFrames, Dates, DuckDB, CSV, ComextAPI
+using DataFrames, Dates, DuckDB, CSV, ComextAPI, TOML
+import ..AnalysisConfigLoader
 using ..DatabaseAccess: write_large_duckdb_table!
 using ..AnalysisConfigLoader: load_product_mappings
 
@@ -19,7 +20,7 @@ Data is saved to DuckDB tables in the raw database.
 - `custom_datasets`: If empty only DS-059341 is used
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 """
-function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String)
+function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String, product_keys_filter=nothing)
     # Parse years
     years = split(years_range, "-")
     if length(years) == 1
@@ -64,14 +65,30 @@ function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_
 
     # Extract and process unique HS codes
     all_hs_codes = Set{String}()
-    for hs_code_entry in product_mapping.hs_codes
-        # Split by comma and clean each code
-        codes = split(hs_code_entry, ",")
-        for code in codes
-            # Clean: trim whitespace and remove dots
-            clean_code = replace(strip(code), "." => "")
-            if !isempty(clean_code)
+    if product_keys_filter !== nothing
+        target_keys = Set(string.(product_keys_filter))
+        cfg = TOML.parsefile(AnalysisConfigLoader.PRODUCTS_CONFIG_PATH)
+        products = get(cfg, "products", Dict{String,Any}())
+        for (key, pdata) in products
+            if !(key in target_keys)
+                continue
+            end
+            for code in get(pdata, "hs_codes", String[])
+                clean_code = replace(strip(string(code)), "." => "")
+                isempty(clean_code) && continue
                 push!(all_hs_codes, clean_code)
+            end
+        end
+    else
+        for hs_code_entry in product_mapping.hs_codes
+            # Split by comma and clean each code
+            codes = split(hs_code_entry, ",")
+            for code in codes
+                # Clean: trim whitespace and remove dots
+                clean_code = replace(strip(code), "." => "")
+                if !isempty(clean_code)
+                    push!(all_hs_codes, clean_code)
+                end
             end
         end
     end

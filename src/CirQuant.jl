@@ -80,9 +80,10 @@ Parameters:
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_comext_data(years_str::String="2002-2024", custom_datasets=nothing)
-    @info "Fetching COMEXT data for years $years_str and saving to database"
-    return ComextDataFetch.fetch_comext_data(years_str, custom_datasets; db_path=DB_PATH_RAW)
+function fetch_comext_data(years_str::String="2002-2024", custom_datasets=nothing; db_path=nothing, product_keys_filter=nothing, kwargs...)
+    target_db = isnothing(db_path) ? DB_PATH_RAW : db_path
+    @info "Fetching COMEXT data for years $years_str and saving to database $target_db"
+    return ComextDataFetch.fetch_comext_data(years_str, custom_datasets; db_path=target_db, product_keys_filter=product_keys_filter, kwargs...)
 end
 
 """
