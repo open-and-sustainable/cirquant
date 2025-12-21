@@ -316,6 +316,7 @@ Load product mapping data from the products.toml configuration file.
   - prodcom_epoch: Epoch key (e.g. `legacy`, `nace_rev2`)
   - epoch_label: Human-readable label for the epoch
   - epoch_start_year / epoch_end_year: Year coverage for the epoch
+  - weee_waste_codes: Eurostat WEEE category codes (for filtering env_waselee datasets)
 
 # Example
 ```julia

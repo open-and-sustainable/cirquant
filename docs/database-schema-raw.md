@@ -120,6 +120,25 @@ Key dimensions/columns:
 - `freq`, `wst_oper`, `waste`, `unit`, `geo`, `time`, `value`
 - Additional columns: `dataset`, `year`, `fetch_date`, `original_key`, `original_value`
 
+## Urban Mine Platform Tables
+
+### Table: `ump_weee_history`
+Urban Mine Platform (UMP) WEEE download normalized to historical observations. All worksheets are parsed and filtered to rows flagged as historical scenarios; the resulting dataset stores country × year × category values in one place.
+
+Columns:
+- `geo` (VARCHAR): Geography/country label parsed from the worksheet
+- `year` (INTEGER): Year extracted from the wide column header or an explicit `year` column
+- `product_label` (VARCHAR): Category or equipment label from the sheet (fallback: sheet name)
+- `metric` (VARCHAR): Inferred measure name (sheet name for wide tables; value column name for tidy tables)
+- `value` (DOUBLE): Parsed numeric value for the year/category
+- `unit` (VARCHAR, nullable): Unit string when present in the worksheet
+- `product_key` (VARCHAR, nullable): CirQuant product name when the category text contains a configured WEEE code
+- `source_sheet` / `source_file` (VARCHAR): Worksheet and workbook identifiers for traceability
+- `fetch_date` (VARCHAR): Timestamp when the workbook was ingested
+
+Notes:
+- Battery data from UMP is not yet available; a stub loader exists to be activated when the dataset is published.
+
 ## Data Types and Storage Decisions
 
 1. **String Storage for Values**: The `value` column is VARCHAR to accommodate:

@@ -24,6 +24,7 @@ include("DataFetch/MaterialCompositionFetch.jl")
 include("DataFetch/MaterialRecyclingRatesFetch.jl")
 include("DataFetch/ProductWeightsBuilder.jl")
 include("DataFetch/ProductCollectionRatesFetch.jl")
+include("DataFetch/UmpDataFetch.jl")
 include("DataTransform/DataProcessor.jl")
 
 using .DatabaseAccess
@@ -35,6 +36,7 @@ using .MaterialCompositionFetch
 using .MaterialRecyclingRatesFetch
 using .ProductWeightsBuilder
 using .ProductCollectionRatesFetch
+using .UmpDataFetch
 using .CountryCodeMapper
 using .DataProcessor
 
@@ -108,34 +110,39 @@ function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=not
 
     try
         # Step 1: Fetch PRODCOM data
-        @info "Step 1/6: Fetching PRODCOM data..."
+        @info "Step 1/7: Fetching PRODCOM data..."
         fetch_prodcom_data(years_str, prodcom_datasets)
         @info "PRODCOM fetch completed."
 
         # Step 2: Fetch COMEXT data
-        @info "Step 2/6: Fetching COMEXT data..."
+        @info "Step 2/7: Fetching COMEXT data..."
         fetch_comext_data(years_str; custom_datasets=comext_datasets)
         @info "COMEXT fetch completed."
 
         # Step 3: Fetch material composition data
-        @info "Step 3/6: Fetching material composition data..."
+        @info "Step 3/7: Fetching material composition data..."
         fetch_material_composition_data(years_str)
         @info "Material composition fetch completed (stub)."
 
         # Step 4: Fetch material recycling rates
-        @info "Step 4/6: Fetching material recycling rates..."
+        @info "Step 4/7: Fetching material recycling rates..."
         fetch_material_recycling_rates_data(years_str)
         @info "Material recycling rates fetch completed (stub)."
 
         # Step 5: Calculate product weights
-        @info "Step 5/6: Calculating product weights from PRODCOM data..."
+        @info "Step 5/7: Calculating product weights from PRODCOM data..."
         fetch_product_weights_data(years_str)
         @info "Product weights calculation completed (stub)."
 
         # Step 6: Fetch product collection rates
-        @info "Step 6/6: Fetching product collection rates..."
+        @info "Step 6/7: Fetching product collection rates..."
         fetch_product_collection_rates_data(years_str)
         @info "Product collection rates fetch completed (stub)."
+
+        # Step 7: Fetch Urban Mine Platform historical WEEE observations
+        @info "Step 7/7: Fetching UMP WEEE historical data..."
+        fetch_ump_weee_data()
+        @info "UMP WEEE fetch completed."
 
         @info "All data fetching completed successfully!"
     catch e
@@ -204,6 +211,28 @@ for those products.
 function fetch_product_collection_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW, product_keys_filter=nothing)
     @info "Fetching product collection rates data for years $years_str"
     return ProductCollectionRatesFetch.fetch_product_collection_rates_data(years_str; db_path=db_path, product_keys_filter=product_keys_filter)
+end
+
+"""
+    fetch_ump_weee_data(; db_path::String=DB_PATH_RAW, download_url::String=UmpDataFetch.DEFAULT_UMP_DOWNLOAD_URL,
+                           dataset_path=nothing, max_tables::Int=typemax(Int))
+
+Download the Urban Mine Platform (UMP) WEEE package, extract historical country-by-year data,
+and load it into the unified `ump_weee_history` table in the raw database.
+"""
+function fetch_ump_weee_data(; db_path::String=DB_PATH_RAW, download_url::String=UmpDataFetch.DEFAULT_UMP_DOWNLOAD_URL,
+                                dataset_path=nothing, max_tables::Int=typemax(Int))
+    @info "Fetching UMP WEEE data" db_path download_url dataset_path max_tables
+    return UmpDataFetch.fetch_ump_weee_data(; db_path=db_path, download_url=download_url, dataset_path=dataset_path, max_tables=max_tables)
+end
+
+"""
+    fetch_ump_battery_data(; db_path::String=DB_PATH_RAW)
+
+Placeholder for future Urban Mine Platform battery import once data is published.
+"""
+function fetch_ump_battery_data(; db_path::String=DB_PATH_RAW)
+    return UmpDataFetch.fetch_ump_battery_data(; db_path=db_path)
 end
 
 
@@ -324,6 +353,8 @@ export fetch_prodcom_data,
     fetch_material_recycling_rates_data,
     fetch_product_weights_data,
     fetch_product_collection_rates_data,
+    fetch_ump_weee_data,
+    fetch_ump_battery_data,
     process_data,
     validate_product_config,
     ANALYSIS_PARAMETERS,

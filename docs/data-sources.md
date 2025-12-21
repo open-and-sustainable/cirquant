@@ -9,6 +9,7 @@ This note summarises every dataset currently (or soon to be) used by CirQuant an
 | **PRODCOM** (Eurostat) | Production and limited trade indicators by PRODCOM code | `prodcom_ds_059358_YYYY`, `prodcom_ds_059359_YYYY` | 1995–present | DS-059358 (sold production/trade) fetched by default; DS-059359 (total production) optional |
 | **COMEXT** (Eurostat) | Trade flows by HS6 code (imports/exports, intra/extra EU) | `comext_ds_059341_YYYY` | 2002–present | Primary source for trade data |
 | **Waste statistics** (Eurostat) | Treatment and collection for WEEE/batteries | `env_wastrt_YYYY`, `env_waseleeos_YYYY`, `env_waspb_YYYY` | Various | Waste treatment (env_wastrt), WEEE open scope (env_waseleeos), portable batteries (env_waspb) |
+| **Urban Mine Platform (UMP)** | WEEE stocks/flows download (Excel package) | `ump_weee_history` | Varies by release | Normalized historical rows by country × year × category; download URL configurable if portal changes |
 | **Waste treatment / material recovery** | Recovery efficiencies by material | `env_wastrt_YYYY` | Various | Provides recovery percentages |
 | **Material composition datasets** | Product bill-of-materials | `<dataset>_YYYY` (to be defined) | TBD | Under assessment (Ecodesign studies, PEF, LCA) |
 | **Derived weights** | Mass & counts per product | `product_weights_YYYY` (processed DB) | Derived annually | Combines config weights with PRODCOM counts and COMEXT mass |
@@ -84,6 +85,11 @@ COMEXT is treated as the authoritative source for trade indicators; PRODCOM fall
 ## 4. Complementary circular-economy data (planned)
 
 The following datasets extend the analysis but have not yet been loaded into the raw DuckDB. When implemented, they will follow the same naming pattern (`<dataset>_<year>`).
+
+### 4.0 Urban Mine Platform (UMP)
+
+- **Content** – WEEE dataset distributed as an Excel package from https://www.urbanmineplatform.eu/download. All historical observations are normalized into `ump_weee_history` with columns for geography, year, category label, metric name, unit, and inferred product matches.
+- **Battery placeholder** – A stub import is wired in for future UMP battery releases; no files are published yet.
 
 ### 4.1 Waste collection statistics
 
