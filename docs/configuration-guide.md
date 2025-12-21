@@ -78,6 +78,7 @@ potential_circularity_rate = 45.0
 - `name` – human-readable label in outputs.
 - `prodcom_codes` – nested table keyed by epoch. Each entry is an array of dot-formatted codes valid for that nomenclature.
 - `hs_codes` – array of HS codes with dots for readability (COMEXT always strips dots internally).
+- `weee_waste_codes` (optional) – Eurostat WEEE category identifiers used to filter `env_waselee` fetches.
 - `parameters` – nested table storing weights and circularity assumptions. `unit` mirrors the PRODCOM unit description to help interpret `weight_kg`.
 
 ## 3. Defining or updating products
