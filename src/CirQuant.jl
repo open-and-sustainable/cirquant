@@ -110,37 +110,32 @@ function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=not
 
     try
         # Step 1: Fetch PRODCOM data
-        @info "Step 1/7: Fetching PRODCOM data..."
+        @info "Step 1/6: Fetching PRODCOM data..."
         fetch_prodcom_data(years_str, prodcom_datasets)
         @info "PRODCOM fetch completed."
 
         # Step 2: Fetch COMEXT data
-        @info "Step 2/7: Fetching COMEXT data..."
+        @info "Step 2/6: Fetching COMEXT data..."
         fetch_comext_data(years_str; custom_datasets=comext_datasets)
         @info "COMEXT fetch completed."
 
         # Step 3: Fetch material composition data
-        @info "Step 3/7: Fetching material composition data..."
+        @info "Step 3/6: Fetching material composition data..."
         fetch_material_composition_data(years_str)
         @info "Material composition fetch completed (stub)."
 
         # Step 4: Fetch material recycling rates
-        @info "Step 4/7: Fetching material recycling rates..."
+        @info "Step 4/6: Fetching material recycling rates..."
         fetch_material_recycling_rates_data(years_str)
         @info "Material recycling rates fetch completed (stub)."
 
-        # Step 5: Calculate product weights
-        @info "Step 5/7: Calculating product weights from PRODCOM data..."
-        fetch_product_weights_data(years_str)
-        @info "Product weights calculation completed (stub)."
-
-        # Step 6: Fetch product collection rates
-        @info "Step 6/7: Fetching product collection rates..."
+        # Step 5: Fetch product collection rates
+        @info "Step 5/6: Fetching product collection rates..."
         fetch_product_collection_rates_data(years_str)
         @info "Product collection rates fetch completed (stub)."
 
-        # Step 7: Fetch Urban Mine Platform historical WEEE observations
-        @info "Step 7/7: Fetching UMP WEEE historical data..."
+        # Step 6: Fetch Urban Mine Platform historical WEEE observations
+        @info "Step 6/6: Fetching UMP WEEE historical data..."
         fetch_ump_weee_data()
         @info "UMP WEEE fetch completed."
 

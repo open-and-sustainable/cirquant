@@ -2,28 +2,9 @@
 
 This document outlines the data needs and computation steps required to enhance CirQuant's circular economy analysis capabilities.
 
-## Data Development Needs
-
-### 1. Product Material Composition Data
-
-**Requirements:**
-- Material breakdown (% by weight) for each product
-- Common materials: steel, aluminum, copper, plastics, glass, electronics, etc.
-- Data structure: Product-specific, annual data (2002-2023)
-- By country and EU aggregates
-
-**Potential Sources:**
-- EU Ecodesign preparatory studies
-- Product Category Rules (PCR) documents
-- Industry material declaration databases
-
-**Implementation:**
-- Raw database: Dataset ID unknown - needs research
-- Processed database: `product_material_composition_YYYY`
-- Structure: Rows by product × geo
-- Annual updates to reflect evolving product designs and materials
-
 ## Computation Steps to Implement
+
+All current work focuses on computation and transformation; no additional data development items are planned at this time.
 
 ### Step 1: Calculate Material-Weighted Recovery Rates
 For each product:
