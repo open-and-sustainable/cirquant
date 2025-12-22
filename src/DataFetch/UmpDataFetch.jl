@@ -29,7 +29,10 @@ function fetch_ump_weee_data(; db_path::String, download_url::String=DEFAULT_UMP
                                 max_tables::Int=typemax(Int))
     path = isnothing(dataset_path) ? _download_ump_file(download_url) : dataset_path
     workbooks = _collect_workbooks(path)
-    isempty(workbooks) && error("No Excel workbooks found in the UMP download")
+    if isempty(workbooks)
+        @warn "No Excel workbooks found in the UMP download" path
+        return false
+    end
 
     product_lookup = _build_weee_lookup()
     results = DataFrame()
@@ -82,10 +85,17 @@ function _collect_workbooks(path::String)
         return [path]
     elseif endswith(lower_path, ".zip")
         return _extract_zip_workbooks(path)
-    else
-        @warn "Unrecognized file type for UMP download; assuming Excel workbook" path
-        return [path]
     end
+
+    magic = _file_magic(path)
+    if _looks_like_excel_zip(magic) || _looks_like_excel_binary(magic)
+        return [path]
+    elseif _looks_like_zip_archive(magic)
+        return _extract_zip_workbooks(path)
+    end
+
+    @warn "Unrecognized file type for UMP download; skipping" path
+    return String[]
 end
 
 function _extract_zip_workbooks(zip_path::String)
@@ -115,20 +125,40 @@ function _extract_workbook(workbook_path::String, product_lookup::Dict{String,St
     all_rows = DataFrame()
     timestamp = Dates.format(Dates.now(), dateformat"yyyy-mm-ddTHH:MM:SS")
 
-    XLSX.openxlsx(workbook_path) do xf
-        sheet_names = collect(keys(xf))
-        taken = 0
-        for sheet_name in sheet_names
-            taken >= max_tables && break
-            rows = _extract_sheet(xf, sheet_name, basename(workbook_path), product_lookup, timestamp)
-            isempty(rows) && continue
-            all_rows = isempty(all_rows) ? rows : vcat(all_rows, rows)
-            taken += 1
+    try
+        XLSX.openxlsx(workbook_path) do xf
+            sheet_names = collect(keys(xf))
+            taken = 0
+            for sheet_name in sheet_names
+                taken >= max_tables && break
+                rows = _extract_sheet(xf, sheet_name, basename(workbook_path), product_lookup, timestamp)
+                isempty(rows) && continue
+                all_rows = isempty(all_rows) ? rows : vcat(all_rows, rows)
+                taken += 1
+            end
         end
+    catch e
+        @warn "Failed to open UMP workbook" workbook_path exception=e
+        return DataFrame()
     end
 
     return all_rows
 end
+
+function _file_magic(path::String, n::Int=4)
+    try
+        open(path, "r") do io
+            return read(io, min(n, filesize(path)))
+        end
+    catch e
+        @warn "Failed to inspect UMP download" path exception=e
+        return UInt8[]
+    end
+end
+
+_looks_like_excel_zip(bytes) = length(bytes) >= 4 && bytes[1:4] == UInt8[0x50, 0x4B, 0x03, 0x04]
+_looks_like_zip_archive(bytes) = _looks_like_excel_zip(bytes)
+_looks_like_excel_binary(bytes) = length(bytes) >= 4 && bytes[1:4] == UInt8[0xD0, 0xCF, 0x11, 0xE0]
 
 function _extract_sheet(xf, sheet_name, source_file::String, product_lookup::Dict{String,String}, fetch_date::String)
     table = try
