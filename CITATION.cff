@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: CirQuant
+type: software
+doi: 10.17605/OSF.IO/U6SF3
+authors:
+  - given-names: Riccardo
+    family-names: Boero
+    email: ribo@nilu.no
+    orcid: 'https://orcid.org/0000-0002-7468-9096'
+    affiliation: NILU
+identifiers:
+  - type: doi
+    value: 10.17605/OSF.IO/U6SF3
+    description: This DOI represents all software versions.
+repository-code: 'https://github.com/equicirco/cirquant'
+url: 'http://equicirco.github.io/cirquant'
+abstract: >-
+  CirQuant quantifies the circular economy potential of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters. The framework estimates material savings from refurbishment and recycling strategies using product-level assumptions on weights, material composition, and achievable recovery rates.
+keywords:
+  - Circular Economy
+  - Official Statistics
+  - Data Analisys
+  - Database
+  - Julia Language
+  - PRQL
+license: MIT
