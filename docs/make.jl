@@ -16,7 +16,6 @@ makedocs(
     sitename = "CirQuant",
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", "false") == "true",
-        assets = ["../images/CirQuant_logo_small.png"],
     ),
     pages = [
         "Home" => "index.md",
