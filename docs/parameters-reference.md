@@ -1,6 +1,6 @@
 # Parameters Reference Guide
 
-The purpose of this guide is to describe every configurable or derived parameter used by CirQuant, how it is stored, and how it affects the analysis. Use it alongside the [Configuration Guide](configuration-guide.md) when editing `config/products.toml`.
+The purpose of this guide is to describe every configurable or derived parameter used by CirQuant, how it is stored, and how it affects the analysis. Use it alongside the [Configuration Guide](configuration-guide/) when editing `config/products.toml`.
 
 ## 1. Configuration structure
 
@@ -120,13 +120,13 @@ When composition or collection data is missing, the system can still run but rec
 1. **Single source of truth** – edit only `config/products.toml`; never hardcode parameters elsewhere.
 2. **Version changes** – use Git history to track parameter updates and link them to methodological notes.
 3. **Scenario management** – create alternative TOML files (e.g., `products_high_potential.toml`) and pass their path into workflows when exploring scenarios.
-4. **Documentation** – whenever a new data-driven parameter (composition, collection, recovery) becomes available, document its provenance in `docs/data-sources.md` and ensure the relevant DuckDB tables are populated.
+4. **Documentation** – whenever a new data-driven parameter (composition, collection, recovery) becomes available, document its provenance in `data-sources.md` and ensure the relevant DuckDB tables are populated.
 5. **Consistency** – keep naming conventions (`products.<snake_case>`) stable to avoid rewriting PRQL joins or analysis notebooks.
 6. **Validation first** – always run `validate_product_config()` (and fix errors) before fetching or processing data.
 
 ## Related Documentation
 
-- [Configuration Guide](configuration-guide.md) – How to edit `products.toml`.
-- [Methodology](methodology.md) – Analytical workflow and indicator definitions.
-- [Database Schema – Processed](database-schema-processed.md) – Storage layout for parameter tables.
-- [Data Sources](data-sources.md) – Provenance for data-driven parameters.
+- [Configuration Guide](configuration-guide/) – How to edit `products.toml`.
+- [Methodology](methodology/) – Analytical workflow and indicator definitions.
+- [Database Schema – Processed](database-schema-processed/) – Storage layout for parameter tables.
+- [Data Sources](data-sources/) – Provenance for data-driven parameters.

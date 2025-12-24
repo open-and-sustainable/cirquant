@@ -1,5 +1,21 @@
 # CirQuant Documentation
 
+![CirQuant logo](https://raw.githubusercontent.com/equicirco/cirquant/main/images/CirQuant_logo_small.png)
+
+CirQuant quantifies the circular economy potential of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters.
+
+## Citation
+
+If you use CirQuant, please cite the project DOI: **10.17605/OSF.IO/U6SF3**.
+
+## Authorship
+
+CirQuant is authored by **Riccardo Boero** (NILU). Contact: ribo@nilu.no.
+
+## License
+
+CirQuant is licensed under the **MIT License**. See the repository `LICENSE` file for details.
+
 CirQuant quantifies the **circular economy potential** of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters. The framework estimates material savings from refurbishment and recycling strategies using product-level assumptions on weights, material composition, and achievable recovery rates. The project DOI is https://doi.org/10.17605/OSF.IO/U6SF3 and the published documentation will be available at http://equicirco.github.io/cirquant.
 
 ## Purpose and Approach
@@ -13,12 +29,12 @@ CirQuant quantifies the **circular economy potential** of strategic product cate
 
 ## Documentation Map
 
-All references live in this `docs/` directory:
-- [Methodology](methodology.md) – research framing, scope definition, and analytical logic.
-- [Configuration Guide](configuration-guide.md) – how to tailor `config/products.toml`.
-- [Data Sources](data-sources.md) – PRODCOM/COMEXT coverage, indicators, caveats.
-- [Raw Database Schema](database-schema-raw.md) and [Processed Schema](database-schema-processed.md) – DuckDB layouts used across the workflow.
-- [Parameters Reference](parameters-reference.md) – meanings and valid ranges of each configurable field.
+All references live in this documentation set:
+- [Methodology](methodology/) – research framing, scope definition, and analytical logic.
+- [Configuration Guide](configuration-guide/) – how to tailor `config/products.toml`.
+- [Data Sources](data-sources/) – PRODCOM/COMEXT coverage, indicators, caveats.
+- [Raw Database Schema](database-schema-raw/) and [Processed Schema](database-schema-processed/) – DuckDB layouts used across the workflow.
+- [Parameters Reference](parameters-reference/) – meanings and valid ranges of each configurable field.
 
 Use these documents for deeper dives; this page focuses on high-level flow.
 
