@@ -1,8 +1,8 @@
 # ![DatAdapt_logo](images/CirQuant_logo_vsmall.png) CirQuant
 
-CirQuant quantifies the **circular economy potential** of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters. Documentation is being prepared for publication at http://equicirco.github.io/cirquant (see the working draft in [`docs/index.md`](docs/index.md)). The project DOI for all software versions is https://doi.org/10.17605/OSF.IO/U6SF3.
+CirQuant quantifies the **circular economy potential** of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters. Documentation is being prepared for publication at http://equicirco.github.io/cirquant (see the working draft in [`docs/src/index.md`](docs/src/index.md)). The project DOI for all software versions is https://doi.org/10.17605/OSF.IO/U6SF3.
 
-The full workflow description, configuration guidance, and methodology have moved to [`docs/index.md`](docs/index.md) and the linked subpages to support a forthcoming static site.
+The full workflow description, configuration guidance, and methodology have moved to [`docs/src/index.md`](docs/src/index.md) and the linked subpages to support a forthcoming static site.
 
 ## Citation
 
