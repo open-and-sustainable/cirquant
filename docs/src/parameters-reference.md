@@ -1,6 +1,6 @@
 # Parameters Reference Guide
 
-The purpose of this guide is to describe every configurable or derived parameter used by CirQuant, how it is stored, and how it affects the analysis. Use it alongside the [Configuration Guide](configuration-guide.md) when editing `config/products.toml`.
+The purpose of this guide is to describe every configurable or derived parameter used by CirQuant, how it is stored, and how it affects the analysis. Use it alongside the [Configuration Guide](configuration-guide/) when editing `config/products.toml`.
 
 ## 1. Configuration structure
 
@@ -126,7 +126,7 @@ When composition or collection data is missing, the system can still run but rec
 
 ## Related Documentation
 
-- [Configuration Guide](configuration-guide.md) – How to edit `products.toml`.
-- [Methodology](methodology.md) – Analytical workflow and indicator definitions.
-- [Database Schema – Processed](database-schema-processed.md) – Storage layout for parameter tables.
-- [Data Sources](data-sources.md) – Provenance for data-driven parameters.
+- [Configuration Guide](configuration-guide/) – How to edit `products.toml`.
+- [Methodology](methodology/) – Analytical workflow and indicator definitions.
+- [Database Schema – Processed](database-schema-processed/) – Storage layout for parameter tables.
+- [Data Sources](data-sources/) – Provenance for data-driven parameters.

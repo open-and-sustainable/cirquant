@@ -2,7 +2,7 @@
 
 CirQuant keeps every research assumption in a single TOML file: `config/products.toml`. This guide highlights how to define the product focus of your analysis, where the key inputs come from, and how to validate the configuration before running any pipelines.
 
-Use the [Parameters Reference](parameters-reference.md) for field-level details and the [Methodology](methodology.md) document to understand how these inputs propagate through the workflow.
+Use the [Parameters Reference](parameters-reference/) for field-level details and the [Methodology](methodology/) document to understand how these inputs propagate through the workflow.
 
 ## 1. What belongs in the configuration?
 
@@ -155,6 +155,6 @@ Before committing configuration changes:
 
 ## 8. Related documentation
 
-- [Parameters Reference](parameters-reference.md) – Field definitions and runtime behaviour.
-- [Methodology](methodology.md) – Analytical flow and how parameters influence indicators.
-- [Data Sources](data-sources.md) – Provenance and caveats for PRODCOM/HS data and supplementary datasets.
+- [Parameters Reference](parameters-reference/) – Field definitions and runtime behaviour.
+- [Methodology](methodology/) – Analytical flow and how parameters influence indicators.
+- [Data Sources](data-sources/) – Provenance and caveats for PRODCOM/HS data and supplementary datasets.
