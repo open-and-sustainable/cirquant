@@ -13,7 +13,7 @@ CirQuant quantifies the **circular economy potential** of strategic product cate
 
 ## Documentation Map
 
-All references live in this `docs/` directory:
+All references live in this documentation set:
 - [Methodology](methodology.md) – research framing, scope definition, and analytical logic.
 - [Configuration Guide](configuration-guide.md) – how to tailor `config/products.toml`.
 - [Data Sources](data-sources.md) – PRODCOM/COMEXT coverage, indicators, caveats.
