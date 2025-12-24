@@ -14,7 +14,10 @@ using Documenter
 
 makedocs(
     sitename = "CirQuant",
+<<<<<<< HEAD
     source = ".",
+=======
+>>>>>>> main
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", "false") == "true",
     ),
