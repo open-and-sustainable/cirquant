@@ -1,6 +1,6 @@
 # Data Sources
 
-This note summarises every dataset currently (or soon to be) used by CirQuant and explains how each maps onto the raw DuckDB schema documented in `docs/database-schema-raw.md`. Use it to check provenance, coverage, and limitations before running large fetch jobs or interpreting results.
+This note summarises every dataset currently (or soon to be) used by CirQuant and explains how each maps onto the raw DuckDB schema documented in `database-schema-raw.md`. Use it to check provenance, coverage, and limitations before running large fetch jobs or interpreting results.
 
 ## 1. Source inventory
 
@@ -25,7 +25,7 @@ Only PRODCOM and COMEXT populate the raw DuckDB today; other sources will follow
 
 ### 2.2 Raw schema alignment
 
-Both datasets are written to tables named `prodcom_ds_<dataset>_<year>` exactly as described in `docs/database-schema-raw.md`. Key columns include:
+Both datasets are written to tables named `prodcom_ds_<dataset>_<year>` exactly as described in `database-schema-raw.md`. Key columns include:
 - `prccode` / `prodcom_code_original` – PRODCOM code without/with dots.
 - `indicators` / `indicators_label` – Indicator codes such as `PRODVAL`, `PRODQNT`, `EXPVAL`, `EXPQNT`, `IMPVAL`, `IMPQNT`, `QNTUNIT`.
 - `decl` / `decl_label` – Declarant country code and label.
@@ -63,7 +63,7 @@ Indicator definitions:
 
 ### 3.2 Raw schema alignment
 
-Rows are stored in `comext_ds_059341_YYYY`. Important columns (see `docs/database-schema-raw.md` for the full list):
+Rows are stored in `comext_ds_059341_YYYY`. Important columns (see `database-schema-raw.md` for the full list):
 - `product` – HS6 code without dots; `hs_code_query` retains the queried string.
 - `flow` / `flow_code` – `1` for imports, `2` for exports (with `flow_label` text).
 - `partner` / `partner_code` / `partner_label` – e.g., `INT_EU27_2020` (intra-EU) or `EXT_EU27_2020` (extra-EU).
@@ -153,9 +153,9 @@ Use the `custom_datasets` argument when calling `fetch_prodcom_data` to include 
 
 ## 8. Database storage recap
 
-The raw DuckDB mirrors Eurostat responses (see `docs/database-schema-raw.md`). Table names and columns match those described above, ensuring:
+The raw DuckDB mirrors Eurostat responses (see `database-schema-raw.md`). Table names and columns match those described above, ensuring:
 - **Traceability** – metadata columns (`fetch_date`, timestamps, original codes) track every API call.
 - **Consistency** – one table per dataset-year combination.
 - **Extensibility** – future sources (waste statistics, material composition) will adopt the same naming convention so documentation remains valid.
 
-Processed tables (e.g., `product_material_composition_YYYY`, `material_recycling_rates_YYYY`, `product_collection_rates_YYYY`, `product_weights_YYYY`, `product_unit_values_YYYY`, `circularity_indicators_by_strategy_YYYY`) build on these inputs and are described in `docs/database-schema-processed.md`.
+Processed tables (e.g., `product_material_composition_YYYY`, `material_recycling_rates_YYYY`, `product_collection_rates_YYYY`, `product_weights_YYYY`, `product_unit_values_YYYY`, `circularity_indicators_by_strategy_YYYY`) build on these inputs and are described in `database-schema-processed.md`.
