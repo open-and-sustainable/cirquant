@@ -93,7 +93,7 @@ CirQuant separates ingestion from analysis:
 - **Raw DuckDB** preserves the exact API payloads for reproducibility and auditing.
 - **Processed DuckDB** stores harmonised production-trade tables, parameter snapshots, and circularity indicators ready for analysis.
 
-Detailed schemas for both databases are described in `docs/database-schema-raw.md` and `docs/database-schema-processed.md`.
+Detailed schemas for both databases are described in `database-schema-raw.md` and `database-schema-processed.md`.
 
 ## Further Reading
 
