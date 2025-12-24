@@ -1,3 +1,15 @@
+using Pkg
+
+Pkg.activate(@__DIR__)
+try
+    Pkg.Registry.add("General")
+catch err
+    if !occursin("already exists", sprint(showerror, err))
+        rethrow()
+    end
+end
+Pkg.instantiate()
+
 using Documenter
 
 makedocs(
@@ -5,7 +17,6 @@ makedocs(
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", "false") == "true",
         assets = ["../images/CirQuant_logo_small.png"],
-        logo = "../images/CirQuant_logo_small.png",
     ),
     pages = [
         "Home" => "index.md",
