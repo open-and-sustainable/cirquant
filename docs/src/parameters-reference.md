@@ -120,7 +120,7 @@ When composition or collection data is missing, the system can still run but rec
 1. **Single source of truth** – edit only `config/products.toml`; never hardcode parameters elsewhere.
 2. **Version changes** – use Git history to track parameter updates and link them to methodological notes.
 3. **Scenario management** – create alternative TOML files (e.g., `products_high_potential.toml`) and pass their path into workflows when exploring scenarios.
-4. **Documentation** – whenever a new data-driven parameter (composition, collection, recovery) becomes available, document its provenance in `docs/data-sources.md` and ensure the relevant DuckDB tables are populated.
+4. **Documentation** – whenever a new data-driven parameter (composition, collection, recovery) becomes available, document its provenance in `data-sources.md` and ensure the relevant DuckDB tables are populated.
 5. **Consistency** – keep naming conventions (`products.<snake_case>`) stable to avoid rewriting PRQL joins or analysis notebooks.
 6. **Validation first** – always run `validate_product_config()` (and fix errors) before fetching or processing data.
 
