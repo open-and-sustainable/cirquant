@@ -1,6 +1,6 @@
 ---
 title: Development Roadmap
-nav_order: 9
+nav_order: 8
 ---
 
 # CirQuant Roadmap - Missing Features
