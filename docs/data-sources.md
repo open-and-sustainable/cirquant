@@ -1,3 +1,8 @@
+---
+title: Data Sources
+nav_order: 3
+---
+
 # Data Sources
 
 This note summarises every dataset currently (or soon to be) used by CirQuant and explains how each maps onto the raw DuckDB schema documented in `database-schema-raw.md`. Use it to check provenance, coverage, and limitations before running large fetch jobs or interpreting results.

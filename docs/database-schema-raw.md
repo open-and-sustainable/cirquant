@@ -1,3 +1,8 @@
+---
+title: Raw Database Schema
+nav_order: 7
+---
+
 # Raw Database Schema
 
 ## Overview

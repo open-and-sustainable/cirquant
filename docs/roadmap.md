@@ -1,3 +1,8 @@
+---
+title: Development Roadmap
+nav_order: 9
+---
+
 # CirQuant Roadmap - Missing Features
 
 This document outlines the data needs and computation steps required to enhance CirQuant's circular economy analysis capabilities.

@@ -1,6 +1,6 @@
 ---
 title: Configuration Guide
-nav_order: 2
+nav_order: 4
 ---
 
 # Configuration Guide

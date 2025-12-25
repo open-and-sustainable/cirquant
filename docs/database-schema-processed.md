@@ -1,3 +1,8 @@
+---
+title: Processed Database Schema
+nav_order: 8
+---
+
 # Processed Database Schema
 
 ## Overview

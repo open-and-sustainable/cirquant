@@ -1,3 +1,8 @@
+---
+title: Methodology
+nav_order: 2
+---
+
 # CirQuant Methodology
 
 This document describes how CirQuant quantifies circular economy potentials for strategic EU product categories. It focuses on the analytical approach, implementation details, and the main limitations encountered when working with official production and trade statistics.

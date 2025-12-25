@@ -1,3 +1,8 @@
+---
+title: Parameters Reference
+nav_order: 6
+---
+
 # Parameters Reference Guide
 
 The purpose of this guide is to describe every configurable or derived parameter used by CirQuant, how it is stored, and how it affects the analysis. Use it alongside the [Configuration Guide](configuration-guide/) when editing `config/products.toml`.
