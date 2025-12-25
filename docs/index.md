@@ -5,7 +5,7 @@ nav_order: 1
 
 # CirQuant Documentation
 
-CirQuant quantifies the **circular economy potential** of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters. The framework estimates material savings from refurbishment and recycling strategies using product-level assumptions on weights, material composition, and achievable recovery rates. The project DOI is https://doi.org/10.17605/OSF.IO/U6SF3 and the published documentation will be available at http://equicirco.github.io/cirquant.
+CirQuant quantifies the **circular economy potential** of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters. The framework estimates material savings from refurbishment and recycling strategies using product-level assumptions on weights, material composition, and achievable recovery rates.
 
 ## Purpose and Approach
 
@@ -150,3 +150,27 @@ results = CircularityProcessor.process_year_data(
 - **PRQL (Pipelined Relational Query Language)** files in `src/DataTransform/` are parameterised through `{{YEAR}}` placeholders, enabling the same query templates across multiple periods.
 
 This separation keeps ingestion, transformation, and analysis reproducible while enabling analysts to inspect intermediate outputs.
+
+## Citation
+
+If you use CirQuant in academic work, please cite it. The following LaTeX block reflects [`CITATION.cff`](CITATION.cff):
+
+```latex
+@software{cirquant,
+  title   = {CirQuant},
+  author  = {Riccardo Boero},
+  doi     = {10.17605/OSF.IO/U6SF3},
+  url     = {http://equicirco.github.io/cirquant},
+  note    = {NILU},
+  version = {all versions}
+}
+```
+The project DOI for all software versions is https://doi.org/10.17605/OSF.IO/U6SF3.
+
+## License
+
+Software is released under the [MIT license](LICENSE). Derived datasets follow [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) due to restrictions on commercial reuse of the original sources.
+
+## Authorship
+
+Maintained by Riccardo Boero (NILU).
