@@ -1,3 +1,8 @@
+---
+title: Configuration Guide
+nav_order: 2
+---
+
 # Configuration Guide
 
 CirQuant keeps every research assumption in a single TOML file: `config/products.toml`. This guide highlights how to define the product focus of your analysis, where the key inputs come from, and how to validate the configuration before running any pipelines.
