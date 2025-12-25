@@ -2,7 +2,7 @@
 title: CirQuant
 description: Documentation
 url: "https://equicirco.github.io/cirquant"
-baseurl: "https://github.com/equicirco/cirquant"   # or "" for a user/org site
+baseurl: ""  
 
 remote_theme: just-the-docs/just-the-docs@v0.10.1
 
