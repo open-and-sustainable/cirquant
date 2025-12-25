@@ -1,0 +1,11 @@
+.site-title {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.site-title .site-logo {
+	height: 1.5rem; // adjust
+	width: auto;
+}
+
