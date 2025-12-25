@@ -1,3 +1,8 @@
+---
+title: Home
+nav_order: 1
+---
+
 # CirQuant Documentation
 
 CirQuant quantifies the **circular economy potential** of strategic product categories in the European Union by combining production (PRODCOM), trade (COMEXT), and circularity parameters. The framework estimates material savings from refurbishment and recycling strategies using product-level assumptions on weights, material composition, and achievable recovery rates. The project DOI is https://doi.org/10.17605/OSF.IO/U6SF3 and the published documentation will be available at http://equicirco.github.io/cirquant.
