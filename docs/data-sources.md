@@ -14,7 +14,7 @@ This note summarises every dataset currently (or soon to be) used by CirQuant an
 | **PRODCOM** (Eurostat) | Production and limited trade indicators by PRODCOM code | `prodcom_ds_059358_YYYY`, `prodcom_ds_059359_YYYY` | 1995–present | DS-059358 (sold production/trade) fetched by default; DS-059359 (total production) optional |
 | **COMEXT** (Eurostat) | Trade flows by HS6 code (imports/exports, intra/extra EU) | `comext_ds_059341_YYYY` | 2002–present | Primary source for trade data |
 | **Waste statistics** (Eurostat) | Treatment and collection for WEEE/batteries | `env_wastrt_YYYY`, `env_waseleeos_YYYY`, `env_waspb_YYYY` | Various | Waste treatment (env_wastrt), WEEE open scope (env_waseleeos), portable batteries (env_waspb) |
-| **Urban Mine Platform (UMP)** | WEEE stocks/flows download (Excel package) | `ump_weee_history` | Varies by release | Normalized historical rows by country × year × category; download URL configurable if portal changes |
+| **Urban Mine Platform (UMP)** | WEEE stocks/flows download (CSV package) | `ump_weee_history`, `ump_weee_sankey` | Varies by release | Charts CSV normalized to historical rows; sankey CSV stored for MFA-style flow analysis |
 | **Waste treatment / material recovery** | Recovery efficiencies by material | `env_wastrt_YYYY` | Various | Provides recovery percentages |
 | **Material composition datasets** | Product bill-of-materials | `<dataset>_YYYY` (to be defined) | TBD | Under assessment (Ecodesign studies, PEF, LCA) |
 | **Derived weights** | Mass & counts per product | `product_weights_YYYY` (processed DB) | Derived annually | Combines config weights with PRODCOM counts and COMEXT mass |
@@ -93,8 +93,15 @@ The following datasets extend the analysis but have not yet been loaded into the
 
 ### 4.0 Urban Mine Platform (UMP)
 
-- **Content** – WEEE dataset distributed as an Excel package from https://www.urbanmineplatform.eu/download. All historical observations are normalized into `ump_weee_history` with columns for geography, year, category label, metric name, unit, and inferred product matches.
-- **Battery placeholder** – A stub import is wired in for future UMP battery releases; no files are published yet.
+- **Content** – WEEE dataset distributed as CSVs from https://www.urbanmineplatform.eu/download. The charts CSV is normalized into `ump_weee_history`, while the sankey CSV is stored as `ump_weee_sankey` for flow-path analysis (historical scenarios only).
+- **WEEE mapping** – UMP uses `WEEE_Cat*` categories. CirQuant maps Eurostat-style WEEE codes in `config/products.toml` to UMP categories during fetch (see `src/DataFetch/UmpDataFetch.jl`):
+  - `EE_TEE` → `WEEE_Cat1`
+  - `EE_SME` → `WEEE_Cat5`
+  - `EE_SITTE` → `WEEE_Cat6`
+  - `EE_LE_PVP` → `WEEE_Cat4b`
+  - `EE_LE` → `WEEE_Cat4a`
+- **Product selection** – By default, UMP fetch is filtered to the mapped WEEE categories for products defined in `config/products.toml`, matching the product scope used for PRODCOM/COMEXT.
+- **Battery placeholder** – UMP does not publish battery data yet; a stub import is wired in for a future battery dataset release.
 
 ### 4.1 Waste collection statistics
 

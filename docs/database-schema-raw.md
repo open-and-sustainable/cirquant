@@ -128,20 +128,37 @@ Key dimensions/columns:
 ## Urban Mine Platform Tables
 
 ### Table: `ump_weee_history`
-Urban Mine Platform (UMP) WEEE download normalized to historical observations. All worksheets are parsed and filtered to rows flagged as historical scenarios; the resulting dataset stores country × year × category values in one place.
+Urban Mine Platform (UMP) WEEE charts CSV normalized to historical observations (OBS/baseline). The dataset stores country × year × category values with the UMP stock/flow ID as the metric.
 
 Columns:
 - `geo` (VARCHAR): Geography/country label parsed from the worksheet
 - `year` (INTEGER): Year extracted from the wide column header or an explicit `year` column
-- `product_label` (VARCHAR): Category or equipment label from the sheet (fallback: sheet name)
-- `metric` (VARCHAR): Inferred measure name (sheet name for wide tables; value column name for tidy tables)
+- `product_label` (VARCHAR): Category label (Layer 1 when available; fallback: Waste Stream)
+- `metric` (VARCHAR): UMP stock/flow identifier (e.g., `WEEE_EEEPOM`, `WEEE_collected`)
 - `value` (DOUBLE): Parsed numeric value for the year/category
 - `unit` (VARCHAR, nullable): Unit string when present in the worksheet
-- `product_key` (VARCHAR, nullable): CirQuant product name when the category text contains a configured WEEE code
-- `source_sheet` / `source_file` (VARCHAR): Worksheet and workbook identifiers for traceability
-- `fetch_date` (VARCHAR): Timestamp when the workbook was ingested
+- `product_key` (VARCHAR, nullable): CirQuant product key when UMP WEEE categories map to `config/products.toml` WEEE codes (e.g., `EE_TEE` → `WEEE_Cat1`)
+- `source_sheet` / `source_file` (VARCHAR): Source file identifiers for traceability
+- `fetch_date` (VARCHAR): Timestamp when the CSV was ingested
+
+### Table: `ump_weee_sankey`
+Urban Mine Platform (UMP) WEEE sankey CSV filtered to historical observations (OBS/baseline). This table preserves the flow structure for downstream MFA-style analysis.
+
+Columns:
+- `waste_stream` (VARCHAR): Waste stream label (typically `WEEE`)
+- `location` (VARCHAR): Geography label
+- `year` (INTEGER): Year extracted from the CSV
+- `scenario` (VARCHAR, nullable): Scenario label (OBS retained; BAU excluded by the loader)
+- `additional_specification` (VARCHAR, nullable): Additional specification field from UMP
+- `stock_flow_id` (VARCHAR, nullable): Stock/flow identifier
+- `layer_1` / `layer_2` / `layer_3` / `layer_4` (VARCHAR, nullable): Sankey decomposition layers
+- `value` (DOUBLE): Parsed numeric value for the row
+- `unit` (VARCHAR, nullable): Unit string when present
+- `source_file` (VARCHAR): Source CSV filename
+- `fetch_date` (VARCHAR): Timestamp when the CSV was ingested
 
 Notes:
+- By default, UMP tables are filtered to WEEE categories mapped from `config/products.toml` (matching the scoped product list).
 - Battery data from UMP is not yet available; a stub loader exists to be activated when the dataset is published.
 
 ## Data Types and Storage Decisions

@@ -2,3 +2,4 @@
 *.log
 CirQuant-database
 docs/build
+temp

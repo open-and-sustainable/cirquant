@@ -119,23 +119,18 @@ function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=not
         fetch_comext_data(years_str; custom_datasets=comext_datasets)
         @info "COMEXT fetch completed."
 
-        # Step 3: Fetch material composition data
-        @info "Step 3/6: Fetching material composition data..."
-        fetch_material_composition_data(years_str)
-        @info "Material composition fetch completed (stub)."
-
-        # Step 4: Fetch material recycling rates
-        @info "Step 4/6: Fetching material recycling rates..."
+        # Step 3: Fetch material recycling rates
+        @info "Step 3/5: Fetching material recycling rates..."
         fetch_material_recycling_rates_data(years_str)
         @info "Material recycling rates fetch completed (stub)."
 
-        # Step 5: Fetch product collection rates
-        @info "Step 5/6: Fetching product collection rates..."
+        # Step 4: Fetch product collection rates
+        @info "Step 4/5: Fetching product collection rates..."
         fetch_product_collection_rates_data(years_str)
         @info "Product collection rates fetch completed (stub)."
 
-        # Step 6: Fetch Urban Mine Platform historical WEEE observations
-        @info "Step 6/6: Fetching UMP WEEE historical data..."
+        # Step 5: Fetch Urban Mine Platform historical WEEE observations
+        @info "Step 5/5: Fetching UMP WEEE historical data..."
         fetch_ump_weee_data()
         @info "UMP WEEE fetch completed."
 
@@ -210,15 +205,17 @@ end
 
 """
     fetch_ump_weee_data(; db_path::String=DB_PATH_RAW, download_url::String=UmpDataFetch.DEFAULT_UMP_DOWNLOAD_URL,
-                           dataset_path=nothing, max_tables::Int=typemax(Int))
+                           dataset_path=nothing, years_range=nothing, product_keys_filter=nothing)
 
-Download the Urban Mine Platform (UMP) WEEE package, extract historical country-by-year data,
-and load it into the unified `ump_weee_history` table in the raw database.
+Download the Urban Mine Platform (UMP) WEEE package, extract historical country-by-year data
+from the charts CSV into `ump_weee_history`, and store flow-path data from the sankey CSV
+in `ump_weee_sankey`. Optional filters keep only selected years or product keys.
 """
 function fetch_ump_weee_data(; db_path::String=DB_PATH_RAW, download_url::String=UmpDataFetch.DEFAULT_UMP_DOWNLOAD_URL,
-                                dataset_path=nothing, max_tables::Int=typemax(Int))
-    @info "Fetching UMP WEEE data" db_path download_url dataset_path max_tables
-    return UmpDataFetch.fetch_ump_weee_data(; db_path=db_path, download_url=download_url, dataset_path=dataset_path, max_tables=max_tables)
+                                dataset_path=nothing, years_range=nothing, product_keys_filter=nothing)
+    @info "Fetching UMP WEEE data" db_path download_url dataset_path years_range product_keys_filter
+    return UmpDataFetch.fetch_ump_weee_data(; db_path=db_path, download_url=download_url, dataset_path=dataset_path,
+        years_range=years_range, product_keys_filter=product_keys_filter)
 end
 
 """

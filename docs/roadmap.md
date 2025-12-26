@@ -7,9 +7,13 @@ nav_order: 8
 
 This document outlines the data needs and computation steps required to enhance CirQuant's circular economy analysis capabilities.
 
+## Data Development Priorities
+
+- Integrate the Urban Mine Platform battery dataset once it is published (extend UMP battery loader and add raw tables).
+
 ## Computation Steps to Implement
 
-All current work focuses on computation and transformation; no additional data development items are planned at this time.
+Computation and transformation remain the main focus, with the data development priorities listed above.
 
 ### Step 1: Calculate Material-Weighted Recovery Rates
 For each product:
