@@ -122,7 +122,7 @@ The following datasets extend the analysis but have not yet been loaded into the
 
 ### 4.3 Material composition datasets
 
-- **Sources under review** – Ecodesign preparatory studies, Product Environmental Footprint (PEF) datasets, commercial LCA databases. UMP sankey flows are used as a stopgap to derive material shares until a dedicated composition dataset is integrated.
+- **Current approach** – Use UMP sankey flows to derive product-level material shares until a dedicated composition dataset is available.
 - **Content** – Product × material × mass share, potentially with year or technology differentiators.
 - **Use** – Enables weighted material recovery calculations in PRQL transformations.
 

@@ -24,7 +24,7 @@ Everything else (e.g., observed collection rates, material composition, recovery
 |-------|-----------------|-------|
 | `prodcom_codes` | Eurostat PRODCOM catalogue, correspondence tables | Always include dots (`28.21.13.30`). Avoid placeholders or aggregate prefixes unless Eurostat publishes them as valid codes. |
 | `hs_codes` | Eurostat COMEXT metadata, WCO HS explanatory notes | Provide every HS6 needed to capture imports/exports for the selected product. |
-| `weight_kg` | Manufacturer datasheets, ecodesign BoM studies, PRODCOM-derived averages | Only required when official data lacks mass units. |
+| `weight_kg` | Manufacturer datasheets, PRODCOM-derived averages | Only required when official data lacks mass units. |
 | `current_circularity_rate` | Eurostat waste statistics, industry surveys, SME interviews | Can be provisional placeholders until official statistics are integrated. |
 | `potential_circularity_rate` | Systematic literature reviews, policy targets, expert elicitation | Should reflect technical/economic potential; cite sources in comments or commit messages. |
 
