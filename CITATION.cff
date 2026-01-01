@@ -1,5 +1,7 @@
 cff-version: 1.2.0
 title: CirQuant
+message: >-
+  v0.1.0 - Full code implmentation and documentation.
 type: software
 doi: --tobeobtained--
 authors:
