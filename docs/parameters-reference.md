@@ -56,12 +56,13 @@ When potential rates are not product-specific, define a global uplift used to de
 
 ```toml
 [circularity_uplift]
-mean = 10.0
-min = 5.0
-max = 20.0
+mean = 30.1625
+sd = 8.3776
+ci_lower = 13.7429
+ci_upper = 46.5821
 ```
 
-The uplift is applied as percentage points on top of the derived current circularity rate (refurbishment + recycling). Min/max bounds are used for sensitivity ranges.
+The uplift is applied as percentage points on top of the derived current circularity rate (refurbishment + recycling). CI bounds are used for sensitivity ranges.
 
 ## 2. Research vs data-driven inputs
 

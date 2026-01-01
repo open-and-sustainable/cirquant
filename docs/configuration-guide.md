@@ -76,9 +76,10 @@ unit = "piece"
 current_refurbishment_rate = 1.0
 
 [circularity_uplift]
-mean = 10.0
-min = 5.0
-max = 20.0
+mean = 30.1625
+sd = 8.3776
+ci_lower = 13.7429
+ci_upper = 46.5821
 ```
 
 - `products.product_key` – use descriptive snake_case keys (e.g., `batteries_li_ion`). Keys appear in logs and database table names.

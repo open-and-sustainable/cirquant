@@ -245,7 +245,6 @@ Load analysis parameters from the products.toml configuration file.
 
 # Returns
 - `Dict{String, Any}`: Analysis parameters dictionary containing:
-  - `current_circularity_rates`: Dict mapping PRODCOM codes to current circularity rates
   - `product_weights_tonnes`: Dict mapping PRODCOM codes to product weights in tonnes
   - `placeholder_for_future_params`: Empty Dict for future parameters
 
@@ -290,13 +289,19 @@ function load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
     # Load global circularity uplift (optional)
     uplift_config = get(config, "circularity_uplift", Dict())
     uplift_mean = get(uplift_config, "mean", 0.0)
-    uplift_min = get(uplift_config, "min", 0.0)
-    uplift_max = get(uplift_config, "max", 0.0)
+    uplift_sd = get(uplift_config, "sd", 0.0)
+    uplift_ci_lower = get(uplift_config, "ci_lower", 0.0)
+    uplift_ci_upper = get(uplift_config, "ci_upper", 0.0)
 
     return Dict{String, Any}(
         "current_refurbishment_rates" => current_refurbishment_rates,
         "product_weights_tonnes" => product_weights_tonnes,
-        "circularity_uplift" => Dict("mean" => uplift_mean, "min" => uplift_min, "max" => uplift_max),
+        "circularity_uplift" => Dict(
+            "mean" => uplift_mean,
+            "sd" => uplift_sd,
+            "ci_lower" => uplift_ci_lower,
+            "ci_upper" => uplift_ci_upper
+        ),
         "placeholder_for_future_params" => Dict{String, Any}()
     )
 end
@@ -603,7 +608,7 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
 
     if haskey(config, "circularity_uplift")
         uplift = config["circularity_uplift"]
-        for field in ["mean", "min", "max"]
+        for field in ["mean", "sd", "ci_lower", "ci_upper"]
             if !haskey(uplift, field)
                 push!(errors, "Missing circularity_uplift.$field in configuration file")
                 is_valid = false
@@ -614,6 +619,11 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
                 push!(errors, "circularity_uplift.$field must be between 0 and 100, got: $(uplift[field])")
                 is_valid = false
             end
+        end
+        if haskey(uplift, "ci_lower") && haskey(uplift, "ci_upper") &&
+           uplift["ci_lower"] > uplift["ci_upper"]
+            push!(errors, "circularity_uplift.ci_lower must be <= ci_upper")
+            is_valid = false
         end
     else
         push!(warnings, "Missing circularity_uplift section; defaulting to 0.0 uplift")

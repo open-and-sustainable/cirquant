@@ -60,16 +60,16 @@ Annual circularity indicators combining production and trade data.
 | apparent_consumption_value_eur | DOUBLE | Monetary value of apparent consumption |
 | current_circularity_rate_pct | DOUBLE | Current material recirculation rate (%) |
 | potential_circularity_rate_pct | DOUBLE | Potential rate using uplift mean (%) |
-| potential_circularity_rate_pct_min | DOUBLE | Potential rate using uplift min (%) |
-| potential_circularity_rate_pct_max | DOUBLE | Potential rate using uplift max (%) |
+| potential_circularity_rate_pct_ci_lower | DOUBLE | Potential rate using uplift CI lower (%) |
+| potential_circularity_rate_pct_ci_upper | DOUBLE | Potential rate using uplift CI upper (%) |
 | collection_rate_pct | DOUBLE | Collection rate (%) used for recycling savings |
 | material_recovery_rate_pct | DOUBLE | Material recovery rate (%) used for recycling savings |
 | estimated_material_savings_tonnes | DOUBLE | Potential material savings |
 | estimated_monetary_savings_eur | DOUBLE | Estimated monetary savings |
-| estimated_material_savings_tonnes_min | DOUBLE | Potential material savings (min uplift) |
-| estimated_material_savings_tonnes_max | DOUBLE | Potential material savings (max uplift) |
-| estimated_monetary_savings_eur_min | DOUBLE | Estimated monetary savings (min uplift) |
-| estimated_monetary_savings_eur_max | DOUBLE | Estimated monetary savings (max uplift) |
+| estimated_material_savings_tonnes_ci_lower | DOUBLE | Potential material savings (CI lower) |
+| estimated_material_savings_tonnes_ci_upper | DOUBLE | Potential material savings (CI upper) |
+| estimated_monetary_savings_eur_ci_lower | DOUBLE | Estimated monetary savings (CI lower) |
+| estimated_monetary_savings_eur_ci_upper | DOUBLE | Estimated monetary savings (CI upper) |
 | current_recycling_savings_tonnes | DOUBLE | Current recycling material savings (tonnes) |
 | current_recycling_savings_eur | DOUBLE | Current recycling material savings (EUR) |
 
@@ -252,10 +252,10 @@ Stores product-specific circularity rate assumptions used in calculations.
 | Column | Type | Description |
 |--------|------|-------------|
 | product_code | VARCHAR | PRODCOM code without dots (e.g., "28211330") |
-| current_circularity_rate | DOUBLE | Reserved (not used; current circularity is derived downstream) |
 | circularity_uplift_mean | DOUBLE | Global uplift mean applied to current rate (%) |
-| circularity_uplift_min | DOUBLE | Global uplift min applied to current rate (%) |
-| circularity_uplift_max | DOUBLE | Global uplift max applied to current rate (%) |
+| circularity_uplift_sd | DOUBLE | Global uplift standard deviation (percentage points) |
+| circularity_uplift_ci_lower | DOUBLE | Global uplift CI lower bound (percentage points) |
+| circularity_uplift_ci_upper | DOUBLE | Global uplift CI upper bound (percentage points) |
 | current_refurbishment_rate | DOUBLE | Current refurbishment rate for this product (%) |
 | last_updated | VARCHAR | Timestamp of last parameter update |
 

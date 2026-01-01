@@ -16,9 +16,10 @@ description = "Codes used in the 2008 and later PRODCOM/EuroProMS datasets."
 
 [circularity_uplift]
 # Global uplift in circularity rates (% points). Used to derive potential rates.
-mean = 0.0
-min = 0.0
-max = 0.0
+mean = 30.1625
+sd = 8.3776
+ci_lower = 13.7429
+ci_upper = 46.5821
 
 [products.heat_pumps]
 id = 1

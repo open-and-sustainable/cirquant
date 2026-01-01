@@ -1453,15 +1453,16 @@ function ensure_circularity_parameters_table_with_connection(config::ProcessingC
     current_refurb = get(config.analysis_params, "current_refurbishment_rates", Dict())
     uplift = get(config.analysis_params, "circularity_uplift", Dict())
     uplift_mean = Float64(get(uplift, "mean", 0.0))
-    uplift_min = Float64(get(uplift, "min", 0.0))
-    uplift_max = Float64(get(uplift, "max", 0.0))
+    uplift_sd = Float64(get(uplift, "sd", 0.0))
+    uplift_ci_lower = Float64(get(uplift, "ci_lower", 0.0))
+    uplift_ci_upper = Float64(get(uplift, "ci_upper", 0.0))
 
     # Create DataFrame with product-specific rates
     product_codes = String[]
-    current_rates_vec = Float64[]
     uplift_mean_vec = Float64[]
-    uplift_min_vec = Float64[]
-    uplift_max_vec = Float64[]
+    uplift_sd_vec = Float64[]
+    uplift_ci_lower_vec = Float64[]
+    uplift_ci_upper_vec = Float64[]
     current_refurb_vec = Float64[]
 
     # Collect all product codes from both dictionaries
@@ -1469,20 +1470,20 @@ function ensure_circularity_parameters_table_with_connection(config::ProcessingC
 
     for product_code in all_products
         push!(product_codes, product_code)
-        push!(current_rates_vec, 0.0)
         push!(uplift_mean_vec, uplift_mean)
-        push!(uplift_min_vec, uplift_min)
-        push!(uplift_max_vec, uplift_max)
+        push!(uplift_sd_vec, uplift_sd)
+        push!(uplift_ci_lower_vec, uplift_ci_lower)
+        push!(uplift_ci_upper_vec, uplift_ci_upper)
         push!(current_refurb_vec, get(current_refurb, product_code, 0.0))
     end
 
     # Create DataFrame with one row per product
     circularity_params_df = DataFrame(
         product_code=product_codes,
-        current_circularity_rate=current_rates_vec,
         circularity_uplift_mean=uplift_mean_vec,
-        circularity_uplift_min=uplift_min_vec,
-        circularity_uplift_max=uplift_max_vec,
+        circularity_uplift_sd=uplift_sd_vec,
+        circularity_uplift_ci_lower=uplift_ci_lower_vec,
+        circularity_uplift_ci_upper=uplift_ci_upper_vec,
         current_refurbishment_rate=current_refurb_vec,
         last_updated=fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(product_codes))
     )

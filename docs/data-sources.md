@@ -116,7 +116,7 @@ The following datasets extend the analysis but have not yet been loaded into the
 ### 4.1 Waste collection statistics
 
 - **`env_waselee`** – WEEE data for electronic equipment.
-- **`env_wasbat`** – Battery waste statistics.
+- **`env_waspb`** – Portable battery statistics.
 - **Content** – Annual collection or recycling rates by product category and country.
 - **Use** – Feeds `product_collection_rates_YYYY`, used to compute current recycling savings and to replace placeholder assumptions in the configuration.
 

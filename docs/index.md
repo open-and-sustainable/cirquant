@@ -76,8 +76,8 @@ fetch_combined_data("2020-2023")
 # fetch_prodcom_data("2020-2023", ["ds-059358", "ds-059359"])
 # fetch_comext_data("2022-2023")
 # fetch_material_composition_data("2020-2023")           # stub
-# fetch_material_recycling_rates_data("2020-2023")       # stub
-# fetch_product_collection_rates_data("2020-2023")       # stub
+# fetch_material_recycling_rates_data("2020-2023")
+# fetch_product_collection_rates_data("2020-2023")
 
 # 3. Process the transformed dataset
 results = process_data("2020-2023")
