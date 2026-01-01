@@ -8,6 +8,7 @@ using ..ProductWeightsBuilder
 using ..DatabaseAccess
 using ..AnalysisConfigLoader
 using ..CountryCodeMapper
+using ..UmpDataFetch
 using DBInterface
 
 """
@@ -25,6 +26,17 @@ const COUNTRY_AGGREGATES_PREFIX = "country_aggregates_"
 const PRODUCT_AGGREGATES_PREFIX = "product_aggregates_"
 const PRODUCT_UNIT_VALUES_PREFIX = "product_unit_values_"
 const ANALYSIS_PARAMS_TABLE = "analysis_parameters"
+const UMP_COMPOSITION_FLOW_ID = "WEEE_categ_mechRec1"
+const UMP_RECOVERY_FLOW_IDS = [
+    "WEEE_2RM_mechRec1Other_other",
+    "WEEE_2RM_mechRec2Other_other",
+    "WEEE_2RM_mechRec2Smelter_AlScrap",
+    "WEEE_2RM_mechRec2Smelter_CuScrap",
+    "WEEE_2RM_mechRec2Smelter_ferrousScrap"
+]
+const UMP_LOSS_FLOW_ID = "WEEE_mechRec2_Landfill_or_Dissipated"
+const UMP_GEO_FALLBACK = "EU27_2020"
+const UMP_WEEE_CODE_MAP = UmpDataFetch.UMP_WEEE_CODE_MAP
 
 """
     ProcessingConfig
@@ -150,6 +162,9 @@ function process_year_complete(year::Int, config::ProcessingConfig)
         # # Step 4b: Harmonize production and trade data using mappings
         # # Step 4c: Fill in PRODCOM trade data where COMEXT is zero
         step4_process_trade_data(year, config, target_conn)
+
+        # Step 4d: Build material composition and recovery rate tables from UMP sankey data
+        step4d_build_material_recovery_rates(year, config, target_conn)
 
         # Step 5: Create main circularity indicators table
         step5_create_circularity_indicators(year, config, target_conn)
@@ -580,6 +595,189 @@ function step4c_fill_prodcom_trade_fallback(year::Int, config::ProcessingConfig,
     catch e
         @error "Failed to create production_trade table" exception = e
         rethrow(e)
+    end
+end
+
+"""
+    step4d_build_material_recovery_rates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+
+Build material composition and material recovery rate tables from UMP sankey data.
+Creates:
+- product_material_composition_YYYY
+- material_recycling_rates_YYYY
+- product_material_recovery_rates_YYYY
+"""
+function step4d_build_material_recovery_rates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 4d: Building material composition and recovery rates from UMP..."
+
+    if !DatabaseAccess.table_exists(config.source_db, "ump_weee_sankey")
+        @warn "UMP sankey table not found in raw DB; skipping material recovery rates"
+        return
+    end
+
+    # Load UMP sankey data for the year
+    raw_conn = DBInterface.connect(DuckDB.DB(config.source_db))
+    sankey_df = DataFrame()
+    try
+        sankey_df = DataFrame(DBInterface.execute(raw_conn, """
+            SELECT year, location, layer_1, layer_4, stock_flow_id, value, unit, scenario
+            FROM ump_weee_sankey
+            WHERE year = $year
+              AND (scenario IS NULL OR scenario = 'OBS')
+        """))
+    finally
+        DBInterface.close!(raw_conn)
+    end
+
+    if nrow(sankey_df) == 0
+        @warn "No UMP sankey rows found for year $year; skipping material recovery rates"
+        return
+    end
+
+    # Keep only material-level rows with WEEE categories
+    sankey_df = filter(row ->
+        !ismissing(row.layer_1) &&
+        startswith(String(row.layer_1), "WEEE_Cat") &&
+        !ismissing(row.layer_4) &&
+        !isempty(String(row.layer_4)),
+        sankey_df
+    )
+
+    if nrow(sankey_df) == 0
+        @warn "UMP sankey data has no material rows for year $year; skipping"
+        return
+    end
+
+    sankey_df.weee_category = String.(sankey_df.layer_1)
+    sankey_df.material = String.(sankey_df.layer_4)
+
+    # Build category-level material composition from UMP
+    comp_rows = filter(:stock_flow_id => (s -> s == UMP_COMPOSITION_FLOW_ID), sankey_df)
+    if nrow(comp_rows) == 0
+        @warn "UMP sankey lacks composition flow $UMP_COMPOSITION_FLOW_ID for year $year; skipping"
+        return
+    end
+
+    comp_by_cat = combine(
+        groupby(comp_rows, [:year, :weee_category, :material]),
+        :value => sum => :material_mass_mg
+    )
+
+    cat_totals = combine(
+        groupby(comp_by_cat, [:year, :weee_category]),
+        :material_mass_mg => sum => :category_mass_mg
+    )
+
+    comp_by_cat = leftjoin(comp_by_cat, cat_totals, on=[:year, :weee_category])
+    comp_by_cat.material_weight_pct = ifelse.(
+        comp_by_cat.category_mass_mg .> 0,
+        comp_by_cat.material_mass_mg ./ comp_by_cat.category_mass_mg .* 100.0,
+        missing
+    )
+
+    # Build material recovery rates by category/material from UMP flows
+    recovered_rows = filter(:stock_flow_id => (s -> s in UMP_RECOVERY_FLOW_IDS), sankey_df)
+    lost_rows = filter(:stock_flow_id => (s -> s == UMP_LOSS_FLOW_ID), sankey_df)
+
+    recovered = combine(
+        groupby(recovered_rows, [:year, :weee_category, :material]),
+        :value => sum => :recovered_mass_mg
+    )
+    lost = combine(
+        groupby(lost_rows, [:year, :weee_category, :material]),
+        :value => sum => :lost_mass_mg
+    )
+
+    recovery_rates = outerjoin(recovered, lost, on=[:year, :weee_category, :material])
+    recovery_rates.recovered_mass_mg = coalesce.(recovery_rates.recovered_mass_mg, 0.0)
+    recovery_rates.lost_mass_mg = coalesce.(recovery_rates.lost_mass_mg, 0.0)
+    denom = recovery_rates.recovered_mass_mg .+ recovery_rates.lost_mass_mg
+    recovery_rates.recovery_rate_pct = ifelse.(denom .> 0, recovery_rates.recovered_mass_mg ./ denom .* 100.0, missing)
+
+    recovery_rates.geo = fill(UMP_GEO_FALLBACK, nrow(recovery_rates))
+    recovery_rates.source = fill("UMP_sankey", nrow(recovery_rates))
+
+    # Map products to WEEE categories
+    mapping_df = DataFrame(DBInterface.execute(target_conn, """
+        SELECT DISTINCT prodcom_code_clean AS product_code, weee_waste_codes
+        FROM product_mapping_codes
+    """))
+
+    product_weee = DataFrame(product_code=String[], weee_category=String[])
+    for row in eachrow(mapping_df)
+        codes_str = row.weee_waste_codes
+        if ismissing(codes_str) || isempty(String(codes_str))
+            continue
+        end
+        codes = split(String(codes_str), ",")
+        for code in codes
+            mapped = get(UMP_WEEE_CODE_MAP, strip(code), nothing)
+            mapped === nothing && continue
+            push!(product_weee, (product_code=String(row.product_code), weee_category=mapped))
+        end
+    end
+
+    if nrow(product_weee) == 0
+        @warn "No product-to-WEEE category mapping found; skipping material recovery rates"
+        return
+    end
+
+    # Product material composition (aggregate across mapped WEEE categories)
+    prod_material_by_cat = innerjoin(comp_by_cat, product_weee, on=:weee_category)
+    prod_material = combine(
+        groupby(prod_material_by_cat, [:year, :product_code, :material]),
+        :material_mass_mg => sum => :material_mass_mg
+    )
+
+    prod_totals = combine(
+        groupby(prod_material, [:year, :product_code]),
+        :material_mass_mg => sum => :product_mass_mg
+    )
+
+    prod_comp = leftjoin(prod_material, prod_totals, on=[:year, :product_code])
+    prod_comp.material_weight_pct = ifelse.(
+        prod_comp.product_mass_mg .> 0,
+        prod_comp.material_mass_mg ./ prod_comp.product_mass_mg .* 100.0,
+        missing
+    )
+    prod_comp.geo = fill(UMP_GEO_FALLBACK, nrow(prod_comp))
+    prod_comp.source = fill("UMP_sankey", nrow(prod_comp))
+
+    # Product material recovery rates (weighted by material masses and category recovery rates)
+    prod_recovery = innerjoin(
+        prod_material_by_cat,
+        recovery_rates,
+        on=[:year, :weee_category, :material]
+    )
+
+    if nrow(prod_recovery) > 0
+        prod_recovery = filter(:recovery_rate_pct => r -> !ismissing(r), prod_recovery)
+    end
+
+    prod_rates = DataFrame(product_code=String[], year=Int[], material_recovery_rate_pct=Float64[], geo=String[], source=String[])
+    if nrow(prod_recovery) > 0
+        grouped = groupby(prod_recovery, [:year, :product_code])
+        for group in grouped
+            total_mass = sum(group.material_mass_mg)
+            total_mass <= 0 && continue
+            weighted_rate = sum(group.material_mass_mg .* group.recovery_rate_pct) / total_mass
+            push!(prod_rates, (
+                product_code=String(group.product_code[1]),
+                year=Int(group.year[1]),
+                material_recovery_rate_pct=weighted_rate,
+                geo=UMP_GEO_FALLBACK,
+                source="UMP_sankey"
+            ))
+        end
+    end
+
+    # Persist tables
+    DatabaseAccess.write_duckdb_table_with_connection!(prod_comp, target_conn, "product_material_composition_$year")
+    DatabaseAccess.write_duckdb_table_with_connection!(recovery_rates, target_conn, "material_recycling_rates_$year")
+    if nrow(prod_rates) > 0
+        DatabaseAccess.write_duckdb_table_with_connection!(prod_rates, target_conn, "product_material_recovery_rates_$year")
+    else
+        @warn "No product material recovery rates calculated for year $year"
     end
 end
 

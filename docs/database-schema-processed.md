@@ -24,6 +24,9 @@ These tables remain in the database after processing:
 - `parameters_circularity_rate` - Product-specific circularity parameters
 - `product_mapping_codes` - PRODCOM to HS code mappings
 - `product_weights_YYYY` - Config weights plus derived mass/counts from available data
+- `product_material_composition_YYYY` - UMP-derived material composition by product
+- `material_recycling_rates_YYYY` - UMP-derived material recovery rates by WEEE category
+- `product_material_recovery_rates_YYYY` - Material-weighted recovery rates by product
 
 ### Temporary Tables
 These tables are created during processing and removed in step 9:
@@ -154,6 +157,48 @@ Config weights combined with any observed/derived mass and counts.
 | total_mass_tonnes | DOUBLE | Mass derived or observed (tonnes); may be missing if not derivable |
 | unit_counts | DOUBLE | Unit counts observed or derived; may be missing if not derivable |
 | source | VARCHAR | How the row was built (`prodcom_counts_config_mass`, `comext_mass_config_counts`, `combined`, `config`) |
+
+### Table: `product_material_composition_YYYY`
+
+Material composition by product and material derived from UMP sankey flows.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots |
+| year | INTEGER | Reference year |
+| geo | VARCHAR | Geography code (currently `EU27_2020`) |
+| material | VARCHAR | Material label from UMP sankey (`layer_4`) |
+| material_mass_mg | DOUBLE | Material mass (Mg) aggregated from UMP flows |
+| product_mass_mg | DOUBLE | Total product mass (Mg) for the product |
+| material_weight_pct | DOUBLE | Material share by mass (%) |
+| source | VARCHAR | `UMP_sankey` |
+
+### Table: `material_recycling_rates_YYYY`
+
+Material recovery rates by WEEE category derived from UMP sankey flows.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| year | INTEGER | Reference year |
+| weee_category | VARCHAR | UMP WEEE category (e.g., `WEEE_Cat1`) |
+| material | VARCHAR | Material label from UMP sankey (`layer_4`) |
+| recovered_mass_mg | DOUBLE | Recovered mass (Mg) |
+| lost_mass_mg | DOUBLE | Loss mass (Mg) from landfill/dissipation |
+| recovery_rate_pct | DOUBLE | Recovery rate (%) |
+| geo | VARCHAR | Geography code (currently `EU27_2020`) |
+| source | VARCHAR | `UMP_sankey` |
+
+### Table: `product_material_recovery_rates_YYYY`
+
+Material-weighted recovery rates by product.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots |
+| year | INTEGER | Reference year |
+| geo | VARCHAR | Geography code (currently `EU27_2020`) |
+| material_recovery_rate_pct | DOUBLE | Material-weighted recovery rate (%) |
+| source | VARCHAR | `UMP_sankey` |
 
 ### Table: `product_unit_values_YYYY`
 

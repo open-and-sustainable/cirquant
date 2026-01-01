@@ -94,6 +94,10 @@ The following datasets extend the analysis but have not yet been loaded into the
 ### 4.0 Urban Mine Platform (UMP)
 
 - **Content** – WEEE dataset distributed as CSVs from https://www.urbanmineplatform.eu/download. The charts CSV is normalized into `ump_weee_history`, while the sankey CSV is stored as `ump_weee_sankey` for flow-path analysis (historical scenarios only).
+- **Derived composition and recovery rates** – UMP sankey flows are aggregated to build:
+  - `product_material_composition_YYYY` (material shares per product)
+  - `material_recycling_rates_YYYY` (material recovery rates per WEEE category)
+  - `product_material_recovery_rates_YYYY` (material-weighted recovery rate per product)
 - **WEEE mapping** – UMP uses `WEEE_Cat*` categories. CirQuant maps Eurostat-style WEEE codes in `config/products.toml` to UMP categories during fetch (see `src/DataFetch/UmpDataFetch.jl`):
   - `EE_TEE` → `WEEE_Cat1`
   - `EE_SME` → `WEEE_Cat5`
@@ -118,7 +122,7 @@ The following datasets extend the analysis but have not yet been loaded into the
 
 ### 4.3 Material composition datasets
 
-- **Sources under review** – Ecodesign preparatory studies, Product Environmental Footprint (PEF) datasets, commercial LCA databases.
+- **Sources under review** – Ecodesign preparatory studies, Product Environmental Footprint (PEF) datasets, commercial LCA databases. UMP sankey flows are used as a stopgap to derive material shares until a dedicated composition dataset is integrated.
 - **Content** – Product × material × mass share, potentially with year or technology differentiators.
 - **Use** – Enables weighted material recovery calculations in PRQL transformations.
 

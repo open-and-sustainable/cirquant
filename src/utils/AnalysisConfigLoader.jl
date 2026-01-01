@@ -334,7 +334,7 @@ function load_product_mappings(config_path::String = PRODUCTS_CONFIG_PATH)
     prodcom_codes_list = String[]
     prodcom_codes_clean = String[]
     hs_codes_list = String[]
-    weee_codes_list = Vector{String}[]
+    weee_codes_list = String[]
     epoch_keys = String[]
     epoch_labels = String[]
     epoch_start_years = Int[]
@@ -346,6 +346,7 @@ function load_product_mappings(config_path::String = PRODUCTS_CONFIG_PATH)
         product_name = product_data["name"]
         hs_code_str = join(product_data["hs_codes"], ",")
         weee_codes = get(product_data, "weee_waste_codes", String[])
+        weee_codes_str = isempty(weee_codes) ? "" : join(weee_codes, ",")
 
         code_sets = _collect_prodcom_code_sets(product_data)
 
@@ -366,7 +367,7 @@ function load_product_mappings(config_path::String = PRODUCTS_CONFIG_PATH)
                 push!(prodcom_codes_list, prodcom_code)
                 push!(prodcom_codes_clean, replace(prodcom_code, "." => ""))
                 push!(hs_codes_list, hs_code_str)
-                push!(weee_codes_list, weee_codes)
+                push!(weee_codes_list, weee_codes_str)
                 push!(epoch_keys, epoch_key)
                 push!(epoch_labels, epoch_info.label)
                 push!(epoch_start_years, epoch_info.start_year)

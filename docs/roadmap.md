@@ -15,11 +15,7 @@ This document outlines the data needs and computation steps required to enhance 
 
 Computation and transformation remain the main focus, with the data development priorities listed above.
 
-### Step 1: Calculate Material-Weighted Recovery Rates
-For each product:
-```sql
-material_recovery_rate = SUM(material_weight_pct * material_recycling_rate)
-```
+Step 1 (material-weighted recovery rates) is now implemented using UMP sankey-derived composition and recovery tables.
 
 ### Step 2: Calculate Current Recycling Material Savings
 ```sql
