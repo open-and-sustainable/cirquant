@@ -500,13 +500,19 @@ function _build_weee_lookup()
     mappings = load_product_mappings()
     lookup = Dict{String,String}()
     for row in eachrow(mappings)
-        codes = row.weee_waste_codes
+        codes_str = row.weee_waste_codes
+        if ismissing(codes_str) || isempty(String(codes_str))
+            continue
+        end
+        codes = split(String(codes_str), ",")
         for code in codes
-            mapped = get(UMP_WEEE_CODE_MAP, code, nothing)
+            code_clean = strip(code)
+            isempty(code_clean) && continue
+            mapped = get(UMP_WEEE_CODE_MAP, code_clean, nothing)
             if mapped !== nothing
                 lookup[lowercase(mapped)] = row.product
             end
-            lookup[lowercase(code)] = row.product
+            lookup[lowercase(code_clean)] = row.product
         end
     end
     return lookup
