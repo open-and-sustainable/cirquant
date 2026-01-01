@@ -41,7 +41,7 @@ This document describes how CirQuant quantifies circular economy potentials for 
    - Apply the PRODCOM fallback to build `production_trade_YYYY`.
 5. **Circular indicator construction** – Enrich the harmonised dataset with:
    - Apparent consumption (production + imports − exports).
-   - Material composition and collection rates when available (UMP sankey-derived material shares/recovery rates and WEEE collection rates are used as a stopgap). If a year lacks UMP sankey data, the most recent prior year is reused with a warning.
+   - Material composition and collection rates when available (UMP sankey-derived material shares/recovery rates and WEEE collection rates are used as a stopgap). If a year lacks UMP sankey data, the most recent prior year is reused with a warning. Refurbishment rates are heuristic placeholders (e.g., higher for large equipment, lower for small electronics) pending empirical data.
    - Refurbishment and recycling savings derived from product assumptions.
 6. **Aggregation and exports** – Build EU and country aggregates, store final circularity tables (including `circularity_indicators_by_strategy_YYYY`) in the processed DuckDB, and expose them for reporting or further analysis.
 

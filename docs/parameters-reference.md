@@ -44,7 +44,7 @@ current_refurbishment_rate = 1.0
 ### 1.2 Parameters block
 - `weight_kg` *(Float)* – Average product mass per unit. Enables conversion from pieces to tonnes when data only reports counts.
 - `unit` *(String)* – Native PRODCOM unit (e.g., `piece`, `set`, `kg`). Used for validation, not for conversions.
-- `current_refurbishment_rate` *(Float, %)* – Estimated current refurbishment share used for strategy-specific indicators.
+- `current_refurbishment_rate` *(Float, %)* – Estimated current refurbishment share used for strategy-specific indicators. When empirical data is unavailable, CirQuant uses heuristic defaults by product type (e.g., 10% for large equipment such as heat pumps and batteries, 5% for larger ICT/EEE, 2% for small electronics).
 
 **Constraints**
 - Rates are expressed from 0 to 100.
