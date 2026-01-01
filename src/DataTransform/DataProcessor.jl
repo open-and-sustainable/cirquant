@@ -879,7 +879,8 @@ function step4e_build_collection_rates(year::Int, config::ProcessingConfig, targ
     elseif DatabaseAccess.table_exists(config.source_db, "env_waselee_$year")
         raw_table = "env_waselee_$year"
     else
-        @warn "No WEEE collection table found for year $year; skipping product collection rates"
+        @warn "No WEEE collection table found for year $year; creating empty product collection table"
+        _write_empty_collection_rates(year, target_conn)
         return
     end
 
@@ -897,14 +898,16 @@ function step4e_build_collection_rates(year::Int, config::ProcessingConfig, targ
     end
 
     if nrow(weee_df) == 0
-        @warn "No collection rate rows found in $raw_table; skipping"
+        @warn "No collection rate rows found in $raw_table; creating empty product collection table"
+        _write_empty_collection_rates(year, target_conn)
         return
     end
 
     # Filter to collection-related operations
     weee_df = filter(:wst_oper => (o -> o in COLLECTION_WST_OPER), weee_df)
     if nrow(weee_df) == 0
-        @warn "No collection operations found in $raw_table; skipping"
+        @warn "No collection operations found in $raw_table; creating empty product collection table"
+        _write_empty_collection_rates(year, target_conn)
         return
     end
 
@@ -952,11 +955,23 @@ function step4e_build_collection_rates(year::Int, config::ProcessingConfig, targ
     end
 
     if nrow(product_rates) == 0
-        @warn "No product collection rates computed for year $year"
+        @warn "No product collection rates computed for year $year; creating empty table"
+        _write_empty_collection_rates(year, target_conn)
         return
     end
 
     DatabaseAccess.write_duckdb_table_with_connection!(product_rates, target_conn, "product_collection_rates_$year")
+end
+
+function _write_empty_collection_rates(year::Int, target_conn::DuckDB.Connection)
+    empty = DataFrame(
+        product_code=String[],
+        year=Int[],
+        geo=String[],
+        collection_rate_pct=Float64[],
+        source=String[]
+    )
+    DatabaseAccess.write_duckdb_table_with_connection!(empty, target_conn, "product_collection_rates_$year")
 end
 
 """
