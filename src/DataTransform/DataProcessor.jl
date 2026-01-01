@@ -64,9 +64,9 @@ Create a processing configuration with sensible defaults.
 # Keywords
 - `source_db`: Path to raw database (default: uses test.duckdb if use_test_mode=true)
 - `target_db`: Path to processed database
-- `start_year`: Starting year for processing (default: 2002)
+- `start_year`: Starting year for processing (default: 2010)
 - `end_year`: Ending year for processing (default: 2024)
-- `use_test_mode`: Use test database with only 2002 data (default: false)
+- `use_test_mode`: Use test database (default: false)
 - `analysis_params`: Analysis parameters for circularity calculations
 - `prql_timeout`: Timeout for PRQL queries in seconds (default: 300)
 - `cleanup_temp_tables`: Whether to remove temporary tables after processing (default: true)
@@ -74,7 +74,7 @@ Create a processing configuration with sensible defaults.
 function create_processing_config(;
     source_db::String="",
     target_db::String="",
-    start_year::Int=2002,
+    start_year::Int=2010,
     end_year::Int=2024,
     use_test_mode::Bool=false,
     analysis_params::Dict{String,Any}=Dict{String,Any}(),
@@ -85,16 +85,16 @@ function create_processing_config(;
     if isempty(source_db)
         source_db = use_test_mode ?
                     "CirQuant-database/raw/test.duckdb" :
-                    "CirQuant-database/raw/CirQuant_2002-2024.duckdb"
+                    "CirQuant-database/raw/CirQuant_2010-2024.duckdb"
     end
 
     if isempty(target_db)
         target_db = use_test_mode ?
                     "CirQuant-database/processed/test_processed.duckdb" :
-                    "CirQuant-database/processed/CirQuant_2002-2024.duckdb"
+                    "CirQuant-database/processed/CirQuant_2010-2024.duckdb"
     end
 
-    # Use only 2002 if in test mode
+    # Use only the test dataset year if in test mode
     if use_test_mode
         start_year = 2024
         end_year = 2024
@@ -1119,11 +1119,11 @@ function step8c_build_unit_values(year::Int, config::ProcessingConfig, target_co
     pt_table = "production_trade_$(year)"
     weights_table = "product_weights_$(year)"
 
-    if !DatabaseAccess.table_exists(config.target_db, pt_table)
+    if !_table_exists_with_conn(target_conn, pt_table)
         @warn "Cannot build unit values: missing $pt_table"
         return
     end
-    if !DatabaseAccess.table_exists(config.target_db, weights_table)
+    if !_table_exists_with_conn(target_conn, weights_table)
         @warn "Cannot build unit values: missing $weights_table"
         return
     end
@@ -1225,6 +1225,14 @@ function step8c_build_unit_values(year::Int, config::ProcessingConfig, target_co
 
     table_name = "$(PRODUCT_UNIT_VALUES_PREFIX)$(year)"
     DatabaseAccess.write_duckdb_table_with_connection!(result, target_conn, table_name)
+end
+
+function _table_exists_with_conn(conn::DuckDB.Connection, table_name::String)
+    result = DBInterface.execute(
+        conn,
+        "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_name = '$table_name'"
+    ) |> DataFrame
+    return result.cnt[1] > 0
 end
 
 """

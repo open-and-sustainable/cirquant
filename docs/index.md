@@ -87,7 +87,7 @@ println("Processed $(results[:processed_years]) years successfully")
 ### Processing variants
 
 ```julia
-# Process all available years (2002-2024)
+# Process all available years (2010-2024)
 process_data()
 
 # Targeted processing
@@ -95,7 +95,7 @@ process_data("2020-2023")
 
 # Advanced options
 process_data("2022", cleanup_temp_tables=false, prql_timeout=600)
-process_data(use_test_mode=true)   # uses 2002 test data
+process_data(use_test_mode=true)   # uses test dataset
 ```
 
 ### Fetching options and test DB

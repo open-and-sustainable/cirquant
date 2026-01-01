@@ -8,7 +8,7 @@ using ..AnalysisConfigLoader: load_product_mappings
 export fetch_comext_data
 
 """
-    fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String)
+    fetch_comext_data(years_range="2010-2024", custom_datasets=nothing; db_path::String)
 
 Fetches COMEXT data from Eurostat API for dataset DS-059341 using HS codes from AnalysisConfigLoader.
 Fetches VALUE_EUR and QUANTITY_KG indicators for both imports and exports,
@@ -16,11 +16,11 @@ for intra-EU and extra-EU trade.
 Data is saved to DuckDB tables in the raw database.
 
 # Arguments
-- `years_range::String`: Year range to fetch (default: "2002-2023")
+- `years_range::String`: Year range to fetch (default: "2010-2024")
 - `custom_datasets`: If empty only DS-059341 is used
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 """
-function fetch_comext_data(years_range="2002-2023", custom_datasets=nothing; db_path::String, product_keys_filter=nothing)
+function fetch_comext_data(years_range="2010-2024", custom_datasets=nothing; db_path::String, product_keys_filter=nothing)
     # Parse years
     years = split(years_range, "-")
     if length(years) == 1

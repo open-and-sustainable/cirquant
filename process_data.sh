@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-YEARS=${1:-"2002-2024"}
-SOURCE_DB=${2:-"CirQuant-database/raw/CirQuant_2002-2024.duckdb"}
-TARGET_DB=${3:-"CirQuant-database/processed/CirQuant_2002-2024.duckdb"}
+YEARS=${1:-"2010-2024"}
+SOURCE_DB=${2:-"CirQuant-database/raw/CirQuant_2010-2024.duckdb"}
+TARGET_DB=${3:-"CirQuant-database/processed/CirQuant_2010-2024.duckdb"}
 LOG_FILE=${4:-"process.log"}
 
 rm -f "$TARGET_DB"

@@ -8,7 +8,7 @@ using ..AnalysisConfigLoader: load_product_mappings
 export fetch_product_collection_rates_data
 
 """
-    fetch_product_collection_rates_data(years_range="2002-2023"; db_path::String, product_keys_filter=nothing)
+    fetch_product_collection_rates_data(years_range="2010-2024"; db_path::String, product_keys_filter=nothing)
 
 Fetch WEEE and battery collection datasets via EurostatAPI and write raw tables:
 - env_waselee_YYYY (legacy WEEE scope)
@@ -18,7 +18,7 @@ Fetch WEEE and battery collection datasets via EurostatAPI and write raw tables:
 If `product_keys_filter` is provided, WEEE datasets are filtered to the `weee_waste_codes`
 configured for those products. Battery dataset is left unfiltered (no WEEE codes).
 """
-function fetch_product_collection_rates_data(years_range="2002-2023"; db_path::String, product_keys_filter=nothing)
+function fetch_product_collection_rates_data(years_range="2010-2024"; db_path::String, product_keys_filter=nothing)
     years = split(years_range, "-")
     start_year = length(years) == 2 ? parse(Int, years[1]) : parse(Int, years[1])
     end_year = length(years) == 2 ? parse(Int, years[2]) : start_year

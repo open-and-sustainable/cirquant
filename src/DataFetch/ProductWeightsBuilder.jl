@@ -304,7 +304,7 @@ function _default_weight_map(config_path::String=joinpath(@__DIR__, "..", "..", 
 end
 
 """
-    build_product_weights_table(years_range="2002-2023"; db_path_raw::String, db_path_processed::String, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
+    build_product_weights_table(years_range="2010-2024"; db_path_raw::String, db_path_processed::String, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
 
 Create a processed table `product_weights_YYYY` containing config weights and derived mass/counts per product/geo/year.
 Derivation rules:
@@ -313,7 +313,7 @@ Derivation rules:
 - If both exist, keep both and mark source as "combined".
 - If neither exists, store config weight with null mass/counts and source "config".
 """
-function build_product_weights_table(years_range="2002-2023"; db_path_raw::String, db_path_processed::String, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
+function build_product_weights_table(years_range="2010-2024"; db_path_raw::String, db_path_processed::String, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
     # Parse years
     years = split(years_range, "-")
     if length(years) == 1
@@ -470,7 +470,7 @@ function build_product_weights_table(years_range="2002-2023"; db_path_raw::Strin
     end
 end
 
-function build_product_weights_table_with_conn(years_range="2002-2023"; db_path_raw::String, conn_processed, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
+function build_product_weights_table_with_conn(years_range="2010-2024"; db_path_raw::String, conn_processed, config_path=joinpath(@__DIR__, "..", "..", "config", "products.toml"))
     # Reuse logic but write via provided connection
     years = split(years_range, "-")
     start_year = length(years) == 2 ? parse(Int, years[1]) : parse(Int, years[1])
@@ -612,21 +612,21 @@ function build_product_weights_table_with_conn(years_range="2002-2023"; db_path_
 end
 
 """
-    fetch_product_weights_data(years_range="2002-2023"; db_path::String, processed_db_path::String=db_path)
+    fetch_product_weights_data(years_range="2010-2024"; db_path::String, processed_db_path::String=db_path)
 
 Wrapper to populate `product_weights_YYYY` tables by combining config weights,
 PRODCOM counts (pieces), and COMEXT mass (kg). Delegates to
 `build_product_weights_table`.
 
 # Arguments
-- `years_range::String`: Year range to fetch (default: "2002-2023")
+- `years_range::String`: Year range to fetch (default: "2010-2024")
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 - `processed_db_path::String`: Target processed DuckDB (defaults to `db_path`)
 
 # Returns
 - `true` once the tables are written.
 """
-function fetch_product_weights_data(years_range="2002-2023"; db_path::String, processed_db_path::String=db_path)
+function fetch_product_weights_data(years_range="2010-2024"; db_path::String, processed_db_path::String=db_path)
     build_product_weights_table(years_range; db_path_raw=db_path, db_path_processed=processed_db_path)
     return true
 end

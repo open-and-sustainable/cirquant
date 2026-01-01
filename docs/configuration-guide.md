@@ -56,7 +56,7 @@ legacy = ["28.21.13.30"]         # Code valid through 2007
 nace_rev2 = ["28.25.13.80"]      # Code published from 2008 onwards
 ```
 
-When you run `fetch_prodcom_data("2002-2024")`, the loader automatically chooses the right list for each year and records the epoch metadata in DuckDB (`prodcom_epoch`, `epoch_start_year`, `epoch_end_year`). COMEXT mapping will only use the codes whose epoch covers the requested trade year, so you avoid duplicate rows.
+When you run `fetch_prodcom_data("2010-2024")`, the loader automatically chooses the right list for each year and records the epoch metadata in DuckDB (`prodcom_epoch`, `epoch_start_year`, `epoch_end_year`). COMEXT mapping will only use the codes whose epoch covers the requested trade year, so you avoid duplicate rows.
 
 ## 2. File anatomy
 

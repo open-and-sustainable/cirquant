@@ -7,13 +7,13 @@ using ..AnalysisConfigLoader: load_product_mappings
 export fetch_material_composition_data
 
 """
-    fetch_material_composition_data(years_range="2002-2023"; db_path::String)
+    fetch_material_composition_data(years_range="2010-2024"; db_path::String)
 
 Fetches product material composition data showing material breakdown (% by weight) for each product.
 This data is essential for calculating material-specific recycling rates.
 
 # Arguments
-- `years_range::String`: Year range to fetch (default: "2002-2023")
+- `years_range::String`: Year range to fetch (default: "2010-2024")
 - `db_path::String`: Path to the raw DuckDB database (required keyword argument)
 
 # Notes
@@ -21,7 +21,7 @@ This data is essential for calculating material-specific recycling rates.
 - May require alternative data sources: Ecodesign studies, PCR documents, industry databases
 - Data structure: Rows by product × geo × material type
 """
-function fetch_material_composition_data(years_range="2002-2023"; db_path::String)
+function fetch_material_composition_data(years_range="2010-2024"; db_path::String)
     # Parse years
     years = split(years_range, "-")
     if length(years) == 1

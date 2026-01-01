@@ -15,12 +15,12 @@
 #     RATE_LIMIT_SECONDS=0.6 RATE_LIMIT_JITTER=0.2 ./fetch_data.sh
 #
 # Examples:
-#   ./fetch_data.sh                  # Fetches data for 2002-2024 (default)
+#   ./fetch_data.sh                  # Fetches data for 2010-2024 (default)
 #   ./fetch_data.sh "2020-2023"      # Fetches data for 2020-2023
 #   ./fetch_data.sh "2022-2022"      # Fetches data for 2022 only
 
 # Get years parameter with default value
-YEARS=${1:-"2002-2024"}
+YEARS=${1:-"2010-2024"}
 PARALLEL_YEARS=${PARALLEL_YEARS:-false}
 MAX_PARALLEL_YEARS=${MAX_PARALLEL_YEARS:-2}
 RATE_LIMIT_SECONDS=${RATE_LIMIT_SECONDS:-0.6}
@@ -28,7 +28,7 @@ RATE_LIMIT_JITTER=${RATE_LIMIT_JITTER:-0.2}
 
 echo "=== CirQuant Raw Data Fetcher ==="
 echo "Fetching data for years: $YEARS"
-echo "Output will be saved to CirQuant-database/raw/CirQuant_2002-2024.duckdb"
+echo "Output will be saved to CirQuant-database/raw/CirQuant_2010-2024.duckdb"
 echo "Parallel years: $PARALLEL_YEARS (max=$MAX_PARALLEL_YEARS, rate_limit=${RATE_LIMIT_SECONDS}s±${RATE_LIMIT_JITTER})"
 echo
 

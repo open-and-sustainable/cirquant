@@ -3,10 +3,10 @@ module CirQuant
 using DataFrames, ProdcomAPI, ComextAPI
 
 # Define the database paths as constants
-const DB_PATH_RAW = "CirQuant-database/raw/CirQuant_2002-2024.duckdb"
-const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_2002-2024.duckdb"
+const DB_PATH_RAW = "CirQuant-database/raw/CirQuant_2010-2024.duckdb"
+const DB_PATH_PROCESSED = "CirQuant-database/processed/CirQuant_2010-2024.duckdb"
 
-# Test database for development (contains only 2002 data)
+# Test database for development (small subset)
 const DB_PATH_TEST = "CirQuant-database/raw/test.duckdb"
 
 # External parameters for circularity calculations - loaded from config/products.toml
@@ -45,14 +45,14 @@ global ANALYSIS_PARAMETERS = AnalysisConfigLoader.load_analysis_parameters()
 
 
 """
-    fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing; db_path=nothing, kwargs...)
+    fetch_prodcom_data(years_str::String="2010-2024", custom_datasets=nothing; db_path=nothing, kwargs...)
 
 Fetches PRODCOM data using the external ProdcomAPI package and saves it to DuckDB.
 Defaults to the main raw DB, but `db_path` can override (e.g., for test fixtures).
 Other keyword arguments are forwarded to `ProdcomDataFetch.fetch_prodcom_data`.
 
 Parameters:
-- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR". Default: "2002-2024".
+- `years_str`: String specifying the year range in format "START_YEAR-END_YEAR". Default: "2010-2024".
 - `custom_datasets`: Optional array of dataset IDs to fetch. Default: module defaults (["ds-059358"]).
 - `db_path`: Optional custom database path. Defaults to `DB_PATH_RAW` when `nothing`.
 - Additional kwargs: passed through (e.g., `parallel_years`, `max_parallel_years`, rate limits, `product_keys_filter`).
@@ -60,14 +60,14 @@ Parameters:
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_prodcom_data(years_str::String="2002-2024", custom_datasets=nothing; db_path=nothing, kwargs...)
+function fetch_prodcom_data(years_str::String="2010-2024", custom_datasets=nothing; db_path=nothing, kwargs...)
     target_db = isnothing(db_path) ? DB_PATH_RAW : db_path
     @info "Fetching PRODCOM data for years $years_str and saving to database $target_db"
     return ProdcomDataFetch.fetch_prodcom_data(years_str, custom_datasets; db_path=target_db, kwargs...)
 end
 
 """
-    fetch_comext_data(years_str::String="2002-2024", custom_datasets=nothing)
+    fetch_comext_data(years_str::String="2010-2024", custom_datasets=nothing)
 
 Fetches COMEXT data using the external ComextAPI package and saves it to the raw DuckDB database.
 This function focuses on the data fetch and storage part of the workflow.
@@ -75,28 +75,28 @@ The years_str parameter should be in the format "START_YEAR-END_YEAR".
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2024".
+              Default is "2010-2024".
 - `custom_datasets`: Optional. An array of dataset IDs to fetch.
                    If not provided, uses available datasets from ComextAPI.
 
 Returns:
 - Statistics about the fetching process including success/failure counts
 """
-function fetch_comext_data(years_str::String="2002-2024"; custom_datasets=nothing, db_path=nothing, product_keys_filter=nothing, kwargs...)
+function fetch_comext_data(years_str::String="2010-2024"; custom_datasets=nothing, db_path=nothing, product_keys_filter=nothing, kwargs...)
     target_db = isnothing(db_path) ? DB_PATH_RAW : db_path
     @info "Fetching COMEXT data for years $years_str and saving to database $target_db"
     return ComextDataFetch.fetch_comext_data(years_str, custom_datasets; db_path=target_db, product_keys_filter=product_keys_filter, kwargs...)
 end
 
 """
-    fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=nothing, comext_datasets=nothing)
+    fetch_combined_data(years_str::String="2010-2024", prodcom_datasets=nothing, comext_datasets=nothing)
 
 Fetches all data types for circular economy analysis for the same year range.
 This includes PRODCOM, COMEXT, and all circular economy specific datasets.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2024".
+              Default is "2010-2024".
 - `prodcom_datasets`: Optional. Array of Prodcom dataset IDs to fetch.
                      If not provided, defaults to ["ds-059358"].
 - `comext_datasets`: Optional. Array of Comext dataset IDs to fetch.
@@ -105,7 +105,7 @@ Parameters:
 Returns:
 - true on successful completion
 """
-function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=nothing, comext_datasets=nothing)
+function fetch_combined_data(years_str::String="2010-2024", prodcom_datasets=nothing, comext_datasets=nothing)
     @info "Starting combined data fetch for all data sources for years $years_str"
 
     try
@@ -144,7 +144,7 @@ function fetch_combined_data(years_str::String="2002-2024", prodcom_datasets=not
 end
 
 """
-    fetch_material_composition_data(years_str::String="2002-2023")
+    fetch_material_composition_data(years_str::String="2010-2024")
 
 Fetches product material composition data showing material breakdown (% by weight) for each product.
 This data is essential for calculating material-specific recycling rates.
@@ -152,28 +152,28 @@ Currently a stub - data source needs to be identified.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2023".
+              Default is "2010-2024".
 
 Returns:
 - Nothing (stub implementation)
 """
-function fetch_material_composition_data(years_str::String="2002-2023")
+function fetch_material_composition_data(years_str::String="2010-2024")
     @info "Fetching material composition data for years $years_str"
     return MaterialCompositionFetch.fetch_material_composition_data(years_str; db_path=DB_PATH_RAW)
 end
 
 """
-    fetch_material_recycling_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW)
+    fetch_material_recycling_rates_data(years_str::String="2010-2024"; db_path::String=DB_PATH_RAW)
 
 Fetches material-specific recycling/recovery rates from env_wastrt via EurostatAPI.
 """
-function fetch_material_recycling_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW)
+function fetch_material_recycling_rates_data(years_str::String="2010-2024"; db_path::String=DB_PATH_RAW)
     @info "Fetching material recycling rates data for years $years_str"
     return MaterialRecyclingRatesFetch.fetch_material_recycling_rates_data(years_str; db_path=db_path)
 end
 
 """
-    fetch_product_weights_data(years_str::String="2002-2023")
+    fetch_product_weights_data(years_str::String="2010-2024")
 
 Builds `product_weights_YYYY` tables in the processed DuckDB by combining
 config weights with PRODCOM counts (pieces) and COMEXT mass (kg) to derive
@@ -181,24 +181,24 @@ total mass and/or unit counts per product, geo, and year.
 
 Parameters:
 - `years_str`: String specifying the year range in format "START_YEAR-END_YEAR".
-              Default is "2002-2023".
+              Default is "2010-2024".
 
 Returns:
 - `true` if at least one table was written, otherwise `false`
 """
-function fetch_product_weights_data(years_str::String="2002-2023")
+function fetch_product_weights_data(years_str::String="2010-2024")
     @info "Fetching product weights data for years $years_str"
     return ProductWeightsBuilder.fetch_product_weights_data(years_str; db_path=DB_PATH_RAW, processed_db_path=DB_PATH_PROCESSED)
 end
 
 """
-    fetch_product_collection_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW, product_keys_filter=nothing)
+    fetch_product_collection_rates_data(years_str::String="2010-2024"; db_path::String=DB_PATH_RAW, product_keys_filter=nothing)
 
 Fetches WEEE and battery collection datasets (env_waselee, env_waseleeos, env_waspb) via EurostatAPI.
 If `product_keys_filter` is provided, WEEE datasets are filtered to the configured `weee_waste_codes`
 for those products.
 """
-function fetch_product_collection_rates_data(years_str::String="2002-2023"; db_path::String=DB_PATH_RAW, product_keys_filter=nothing)
+function fetch_product_collection_rates_data(years_str::String="2010-2024"; db_path::String=DB_PATH_RAW, product_keys_filter=nothing)
     @info "Fetching product collection rates data for years $years_str"
     return ProductCollectionRatesFetch.fetch_product_collection_rates_data(years_str; db_path=db_path, product_keys_filter=product_keys_filter)
 end
@@ -261,7 +261,7 @@ function validate_product_config(config_path::String = joinpath(@__DIR__, "..", 
 end
 
 """
-    process_data(years_str::String="2002-2024"; kwargs...)
+    process_data(years_str::String="2010-2024"; kwargs...)
 
 Process raw data into the processed database format for the specified year(s).
 This function follows the same pattern as fetch_data functions, accepting either
@@ -271,10 +271,10 @@ a single year or a range of years.
 - `years_str`: String specifying the year(s) to process. Can be:
   - Single year: "2022"
   - Year range: "2020-2023"
-  Default is "2002-2024".
+  Default is "2010-2024".
 
 # Keywords
-- `use_test_mode`: Use test database with only 2002 data (default: false)
+- `use_test_mode`: Use test database (default: false)
 - `source_db`: Path to raw database (auto-determined if not specified)
 - `target_db`: Path to processed database (auto-determined if not specified)
 - `prql_timeout`: Timeout for PRQL queries in seconds (default: 300)
@@ -294,14 +294,14 @@ results = process_data("2020-2023")
 # Process all available years
 results = process_data()
 
-# Process test data (2002 only)
+# Process test data (test dataset)
 results = process_data(use_test_mode=true)
 
 # Process with custom database paths
 results = process_data("2020-2022", source_db="custom_raw.duckdb", target_db="custom_processed.duckdb")
 ```
 """
-function process_data(years_str::String="2002-2024"; kwargs...)
+function process_data(years_str::String="2010-2024"; kwargs...)
     # Parse the years string to determine start and end years
     if contains(years_str, "-")
         # Range format: "YYYY-YYYY"

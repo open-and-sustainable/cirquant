@@ -9,7 +9,7 @@ nav_order: 7
 
 The processed database contains transformed and analysis-ready data derived from the raw database through PRQL queries. All data is harmonized, with consistent units and calculated indicators.
 
-**Database**: `CirQuant-database/processed/CirQuant_2002-2023.duckdb`
+**Database**: `CirQuant-database/processed/CirQuant_2010-2024.duckdb`
 
 ## Table Types
 
@@ -344,8 +344,8 @@ group {product_code, geo, year} (
 
 1. **Time Coverage**:
    - Production data: 1995-2023 (where available)
-   - Trade data: 2002-2023 (COMEXT limitation)
-   - Combined indicators: 2002-2023
+   - Trade data: 2010-2024 (current dataset scope)
+   - Combined indicators: 2010-2024
 
 2. **Missing Data**:
    - NULL indicates no data available

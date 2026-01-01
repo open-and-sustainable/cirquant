@@ -9,7 +9,7 @@ nav_order: 6
 
 The raw database stores data exactly as fetched from Eurostat APIs without transformation. This preserves the original data structure and allows for full traceability.
 
-**Database**: `CirQuant-database/raw/CirQuant_2002-2023.duckdb`
+**Database**: `CirQuant-database/raw/CirQuant_2010-2024.duckdb`
 
 ## Table Naming Convention
 
