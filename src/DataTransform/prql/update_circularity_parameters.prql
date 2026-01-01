@@ -5,12 +5,17 @@
 from ci = circularity_indicators_{{YEAR}}
 # Join with circularity parameters based on product code to get product-specific rates
 join pcr = parameters_circularity_rate (ci.product_code == pcr.product_code)
+join side:left coll_geo = product_collection_rates_{{YEAR}} (ci.product_code == coll_geo.product_code && ci.geo == coll_geo.geo)
+join side:left coll_eu = product_collection_rates_{{YEAR}} (ci.product_code == coll_eu.product_code && coll_eu.geo == "EU27_2020")
+join side:left rec_eu = product_material_recovery_rates_{{YEAR}} (ci.product_code == rec_eu.product_code && rec_eu.geo == "EU27_2020")
 
 # Apply the circularity rates and calculate savings
 derive {
     # Override with new product-specific circularity rates from parameters_circularity_rate table
     current_circularity_rate_pct = pcr.current_circularity_rate,
     potential_circularity_rate_pct = pcr.potential_circularity_rate,
+    collection_rate_pct = s"COALESCE(coll_geo.collection_rate_pct, coll_eu.collection_rate_pct)",
+    material_recovery_rate_pct = rec_eu.material_recovery_rate_pct,
 
     # Calculate estimated savings based on the difference in rates
     estimated_material_savings_tonnes = s"""
@@ -25,6 +30,30 @@ derive {
         CASE
             WHEN apparent_consumption_value_eur > 0
             THEN apparent_consumption_value_eur * (pcr.potential_circularity_rate - pcr.current_circularity_rate) / 100.0
+            ELSE 0.0
+        END
+    """,
+
+    current_recycling_savings_tonnes = s"""
+        CASE
+            WHEN apparent_consumption_tonnes > 0
+             AND COALESCE(coll_geo.collection_rate_pct, coll_eu.collection_rate_pct) IS NOT NULL
+             AND rec_eu.material_recovery_rate_pct IS NOT NULL
+            THEN apparent_consumption_tonnes
+                 * COALESCE(coll_geo.collection_rate_pct, coll_eu.collection_rate_pct) / 100.0
+                 * rec_eu.material_recovery_rate_pct / 100.0
+            ELSE 0.0
+        END
+    """,
+
+    current_recycling_savings_eur = s"""
+        CASE
+            WHEN apparent_consumption_value_eur > 0
+             AND COALESCE(coll_geo.collection_rate_pct, coll_eu.collection_rate_pct) IS NOT NULL
+             AND rec_eu.material_recovery_rate_pct IS NOT NULL
+            THEN apparent_consumption_value_eur
+                 * COALESCE(coll_geo.collection_rate_pct, coll_eu.collection_rate_pct) / 100.0
+                 * rec_eu.material_recovery_rate_pct / 100.0
             ELSE 0.0
         END
     """
@@ -46,6 +75,10 @@ select {
     apparent_consumption_value_eur = ci.apparent_consumption_value_eur,
     current_circularity_rate_pct,
     potential_circularity_rate_pct,
+    collection_rate_pct,
+    material_recovery_rate_pct,
     estimated_material_savings_tonnes,
-    estimated_monetary_savings_eur
+    estimated_monetary_savings_eur,
+    current_recycling_savings_tonnes,
+    current_recycling_savings_eur
 }

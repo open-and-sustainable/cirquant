@@ -24,6 +24,7 @@ These tables remain in the database after processing:
 - `parameters_circularity_rate` - Product-specific circularity parameters
 - `product_mapping_codes` - PRODCOM to HS code mappings
 - `product_weights_YYYY` - Config weights plus derived mass/counts from available data
+- `product_collection_rates_YYYY` - Product collection rates derived from WEEE datasets
 - `product_material_composition_YYYY` - UMP-derived material composition by product
 - `material_recycling_rates_YYYY` - UMP-derived material recovery rates by WEEE category
 - `product_material_recovery_rates_YYYY` - Material-weighted recovery rates by product
@@ -58,8 +59,12 @@ Annual circularity indicators combining production and trade data.
 | apparent_consumption_value_eur | DOUBLE | Monetary value of apparent consumption |
 | current_circularity_rate_pct | DOUBLE | Current material recirculation rate (%) |
 | potential_circularity_rate_pct | DOUBLE | Achievable rate with innovations (%) |
+| collection_rate_pct | DOUBLE | Collection rate (%) used for recycling savings |
+| material_recovery_rate_pct | DOUBLE | Material recovery rate (%) used for recycling savings |
 | estimated_material_savings_tonnes | DOUBLE | Potential material savings |
 | estimated_monetary_savings_eur | DOUBLE | Estimated monetary savings |
+| current_recycling_savings_tonnes | DOUBLE | Current recycling material savings (tonnes) |
+| current_recycling_savings_eur | DOUBLE | Current recycling material savings (EUR) |
 
 ### Table: `production_trade_YYYY`
 
@@ -157,6 +162,18 @@ Config weights combined with any observed/derived mass and counts.
 | total_mass_tonnes | DOUBLE | Mass derived or observed (tonnes); may be missing if not derivable |
 | unit_counts | DOUBLE | Unit counts observed or derived; may be missing if not derivable |
 | source | VARCHAR | How the row was built (`prodcom_counts_config_mass`, `comext_mass_config_counts`, `combined`, `config`) |
+
+### Table: `product_collection_rates_YYYY`
+
+Collection rates derived from Eurostat WEEE datasets (`env_waselee` / `env_waseleeos`).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots |
+| year | INTEGER | Reference year |
+| geo | VARCHAR | Geography code from WEEE dataset |
+| collection_rate_pct | DOUBLE | Collection rate (%) |
+| source | VARCHAR | Raw table name used (`env_waselee_YYYY` or `env_waseleeos_YYYY`) |
 
 ### Table: `product_material_composition_YYYY`
 

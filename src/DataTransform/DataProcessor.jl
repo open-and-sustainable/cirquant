@@ -4,6 +4,7 @@ using DataFrames
 using DuckDB, DBInterface
 using Dates
 using Dates: now, format
+using Statistics: mean
 using ..ProductWeightsBuilder
 using ..DatabaseAccess
 using ..AnalysisConfigLoader
@@ -37,6 +38,8 @@ const UMP_RECOVERY_FLOW_IDS = [
 const UMP_LOSS_FLOW_ID = "WEEE_mechRec2_Landfill_or_Dissipated"
 const UMP_GEO_FALLBACK = "EU27_2020"
 const UMP_WEEE_CODE_MAP = UmpDataFetch.UMP_WEEE_CODE_MAP
+const COLLECTION_WST_OPER = Set(["COL", "COL_HH", "COL_OTH"])
+const COLLECTION_UNITS = Set(["PC", "AVG_3Y"])
 
 """
     ProcessingConfig
@@ -165,6 +168,9 @@ function process_year_complete(year::Int, config::ProcessingConfig)
 
         # Step 4d: Build material composition and recovery rate tables from UMP sankey data
         step4d_build_material_recovery_rates(year, config, target_conn)
+
+        # Step 4e: Build product collection rates from Eurostat WEEE datasets
+        step4e_build_collection_rates(year, config, target_conn)
 
         # Step 5: Create main circularity indicators table
         step5_create_circularity_indicators(year, config, target_conn)
@@ -615,9 +621,10 @@ function step4d_build_material_recovery_rates(year::Int, config::ProcessingConfi
         return
     end
 
-    # Load UMP sankey data for the year
+    # Load UMP sankey data for the year (fallback to previous year if missing)
     raw_conn = DBInterface.connect(DuckDB.DB(config.source_db))
     sankey_df = DataFrame()
+    fallback_year = nothing
     try
         sankey_df = DataFrame(DBInterface.execute(raw_conn, """
             SELECT year, location, layer_1, layer_4, stock_flow_id, value, unit, scenario
@@ -625,13 +632,36 @@ function step4d_build_material_recovery_rates(year::Int, config::ProcessingConfi
             WHERE year = $year
               AND (scenario IS NULL OR scenario = 'OBS')
         """))
+        if nrow(sankey_df) == 0
+            fallback = DataFrame(DBInterface.execute(raw_conn, """
+                SELECT MAX(year) AS year
+                FROM ump_weee_sankey
+                WHERE year < $year
+                  AND (scenario IS NULL OR scenario = 'OBS')
+            """))
+            if nrow(fallback) > 0 && !ismissing(fallback.year[1])
+                fallback_year = Int(fallback.year[1])
+                sankey_df = DataFrame(DBInterface.execute(raw_conn, """
+                    SELECT year, location, layer_1, layer_4, stock_flow_id, value, unit, scenario
+                    FROM ump_weee_sankey
+                    WHERE year = $fallback_year
+                      AND (scenario IS NULL OR scenario = 'OBS')
+                """))
+            end
+        end
     finally
         DBInterface.close!(raw_conn)
     end
 
     if nrow(sankey_df) == 0
-        @warn "No UMP sankey rows found for year $year; skipping material recovery rates"
+        @warn "No UMP sankey rows found for year $year; creating empty material recovery tables"
+        _write_empty_material_tables(year, target_conn)
         return
+    end
+
+    if fallback_year !== nothing
+        @warn "Using UMP sankey data from $fallback_year for year $year"
+        sankey_df.year .= year
     end
 
     # Keep only material-level rows with WEEE categories
@@ -644,7 +674,8 @@ function step4d_build_material_recovery_rates(year::Int, config::ProcessingConfi
     )
 
     if nrow(sankey_df) == 0
-        @warn "UMP sankey data has no material rows for year $year; skipping"
+        @warn "UMP sankey data has no material rows for year $year; creating empty material recovery tables"
+        _write_empty_material_tables(year, target_conn)
         return
     end
 
@@ -654,7 +685,8 @@ function step4d_build_material_recovery_rates(year::Int, config::ProcessingConfi
     # Build category-level material composition from UMP
     comp_rows = filter(:stock_flow_id => (s -> s == UMP_COMPOSITION_FLOW_ID), sankey_df)
     if nrow(comp_rows) == 0
-        @warn "UMP sankey lacks composition flow $UMP_COMPOSITION_FLOW_ID for year $year; skipping"
+        @warn "UMP sankey lacks composition flow $UMP_COMPOSITION_FLOW_ID for year $year; creating empty material recovery tables"
+        _write_empty_material_tables(year, target_conn)
         return
     end
 
@@ -718,7 +750,8 @@ function step4d_build_material_recovery_rates(year::Int, config::ProcessingConfi
     end
 
     if nrow(product_weee) == 0
-        @warn "No product-to-WEEE category mapping found; skipping material recovery rates"
+        @warn "No product-to-WEEE category mapping found; creating empty material recovery tables"
+        _write_empty_material_tables(year, target_conn)
         return
     end
 
@@ -777,8 +810,150 @@ function step4d_build_material_recovery_rates(year::Int, config::ProcessingConfi
     if nrow(prod_rates) > 0
         DatabaseAccess.write_duckdb_table_with_connection!(prod_rates, target_conn, "product_material_recovery_rates_$year")
     else
-        @warn "No product material recovery rates calculated for year $year"
+        @warn "No product material recovery rates calculated for year $year; creating empty table"
+        _write_empty_material_recovery_rates(year, target_conn)
     end
+end
+
+function _write_empty_material_tables(year::Int, target_conn::DuckDB.Connection)
+    _write_empty_material_composition(year, target_conn)
+    _write_empty_material_recycling_rates(year, target_conn)
+    _write_empty_material_recovery_rates(year, target_conn)
+end
+
+function _write_empty_material_composition(year::Int, target_conn::DuckDB.Connection)
+    empty = DataFrame(
+        product_code=String[],
+        year=Int[],
+        geo=String[],
+        material=String[],
+        material_mass_mg=Float64[],
+        product_mass_mg=Float64[],
+        material_weight_pct=Float64[],
+        source=String[]
+    )
+    DatabaseAccess.write_duckdb_table_with_connection!(empty, target_conn, "product_material_composition_$year")
+end
+
+function _write_empty_material_recycling_rates(year::Int, target_conn::DuckDB.Connection)
+    empty = DataFrame(
+        year=Int[],
+        weee_category=String[],
+        material=String[],
+        recovered_mass_mg=Float64[],
+        lost_mass_mg=Float64[],
+        recovery_rate_pct=Float64[],
+        geo=String[],
+        source=String[]
+    )
+    DatabaseAccess.write_duckdb_table_with_connection!(empty, target_conn, "material_recycling_rates_$year")
+end
+
+function _write_empty_material_recovery_rates(year::Int, target_conn::DuckDB.Connection)
+    empty = DataFrame(
+        product_code=String[],
+        year=Int[],
+        geo=String[],
+        material_recovery_rate_pct=Float64[],
+        source=String[]
+    )
+    DatabaseAccess.write_duckdb_table_with_connection!(empty, target_conn, "product_material_recovery_rates_$year")
+end
+
+"""
+    step4e_build_collection_rates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+
+Build product collection rate table from Eurostat WEEE datasets.
+Creates:
+- product_collection_rates_YYYY
+"""
+function step4e_build_collection_rates(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 4e: Building product collection rates..."
+
+    raw_table = ""
+    if DatabaseAccess.table_exists(config.source_db, "env_waseleeos_$year")
+        raw_table = "env_waseleeos_$year"
+    elseif DatabaseAccess.table_exists(config.source_db, "env_waselee_$year")
+        raw_table = "env_waselee_$year"
+    else
+        @warn "No WEEE collection table found for year $year; skipping product collection rates"
+        return
+    end
+
+    raw_conn = DBInterface.connect(DuckDB.DB(config.source_db))
+    weee_df = DataFrame()
+    try
+        weee_df = DataFrame(DBInterface.execute(raw_conn, """
+            SELECT geo, waste, wst_oper, unit, value
+            FROM "$raw_table"
+            WHERE unit IN ('PC', 'AVG_3Y')
+              AND value IS NOT NULL
+        """))
+    finally
+        DBInterface.close!(raw_conn)
+    end
+
+    if nrow(weee_df) == 0
+        @warn "No collection rate rows found in $raw_table; skipping"
+        return
+    end
+
+    # Filter to collection-related operations
+    weee_df = filter(:wst_oper => (o -> o in COLLECTION_WST_OPER), weee_df)
+    if nrow(weee_df) == 0
+        @warn "No collection operations found in $raw_table; skipping"
+        return
+    end
+
+    weee_rates = combine(
+        groupby(weee_df, [:geo, :waste]),
+        :value => mean => :collection_rate_pct
+    )
+
+    mapping_df = DataFrame(DBInterface.execute(target_conn, """
+        SELECT DISTINCT prodcom_code_clean AS product_code, weee_waste_codes
+        FROM product_mapping_codes
+    """))
+
+    product_rates = DataFrame(
+        product_code=String[],
+        year=Int[],
+        geo=String[],
+        collection_rate_pct=Float64[],
+        source=String[]
+    )
+
+    for row in eachrow(mapping_df)
+        codes_str = row.weee_waste_codes
+        if ismissing(codes_str) || isempty(String(codes_str))
+            continue
+        end
+
+        codes = split(String(codes_str), ",")
+        filtered = filter(r -> r.waste in codes, weee_rates)
+        if nrow(filtered) == 0
+            continue
+        end
+
+        grouped = groupby(filtered, :geo)
+        for group in grouped
+            rate = mean(group.collection_rate_pct)
+            push!(product_rates, (
+                product_code=String(row.product_code),
+                year=year,
+                geo=String(group.geo[1]),
+                collection_rate_pct=rate,
+                source=raw_table
+            ))
+        end
+    end
+
+    if nrow(product_rates) == 0
+        @warn "No product collection rates computed for year $year"
+        return
+    end
+
+    DatabaseAccess.write_duckdb_table_with_connection!(product_rates, target_conn, "product_collection_rates_$year")
 end
 
 """

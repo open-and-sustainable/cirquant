@@ -98,6 +98,7 @@ The following datasets extend the analysis but have not yet been loaded into the
   - `product_material_composition_YYYY` (material shares per product)
   - `material_recycling_rates_YYYY` (material recovery rates per WEEE category)
   - `product_material_recovery_rates_YYYY` (material-weighted recovery rate per product)
+- **Fallback** – If UMP sankey data is missing for a year, the most recent prior year is reused and logged.
 - **WEEE mapping** – UMP uses `WEEE_Cat*` categories. CirQuant maps Eurostat-style WEEE codes in `config/products.toml` to UMP categories during fetch (see `src/DataFetch/UmpDataFetch.jl`):
   - `EE_TEE` → `WEEE_Cat1`
   - `EE_SME` → `WEEE_Cat5`
@@ -112,7 +113,7 @@ The following datasets extend the analysis but have not yet been loaded into the
 - **`env_waselee`** – WEEE data for electronic equipment.
 - **`env_wasbat`** – Battery waste statistics.
 - **Content** – Annual collection or recycling rates by product category and country.
-- **Use** – Provides `current_circularity_rate` values grounded in official statistics, replacing placeholder assumptions in the configuration.
+- **Use** – Feeds `product_collection_rates_YYYY`, used to compute current recycling savings and to replace placeholder assumptions in the configuration.
 
 ### 4.2 Waste treatment / recovery efficiency
 

@@ -16,11 +16,8 @@ This document outlines the data needs and computation steps required to enhance 
 Computation and transformation remain the main focus, with the data development priorities listed above.
 
 Step 1 (material-weighted recovery rates) is now implemented using UMP sankey-derived composition and recovery tables.
+Step 2 (current recycling material savings) is now implemented using WEEE collection rates and UMP-derived recovery rates.
 
-### Step 2: Calculate Current Recycling Material Savings
-```sql
-current_recycling_savings = collection_rate * material_recovery_rate * apparent_consumption
-```
 Note: Current refurbishment rates remain largely unknown/estimated
 
 ### Step 3: Calculate Strategy-Specific Indicators

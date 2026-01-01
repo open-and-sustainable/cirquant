@@ -10,8 +10,12 @@ derive {
     # Circularity rates set to NULL - will be populated later
     current_circularity_rate_pct = s"CAST(NULL AS DOUBLE)",
     potential_circularity_rate_pct = s"CAST(NULL AS DOUBLE)",
+    collection_rate_pct = s"CAST(NULL AS DOUBLE)",
+    material_recovery_rate_pct = s"CAST(NULL AS DOUBLE)",
     estimated_material_savings_tonnes = s"CAST(0.0 AS DOUBLE)",
-    estimated_monetary_savings_eur = s"CAST(0.0 AS DOUBLE)"
+    estimated_monetary_savings_eur = s"CAST(0.0 AS DOUBLE)",
+    current_recycling_savings_tonnes = s"CAST(0.0 AS DOUBLE)",
+    current_recycling_savings_eur = s"CAST(0.0 AS DOUBLE)"
 }
 
 # Calculate apparent consumption
@@ -45,6 +49,10 @@ select {
     apparent_consumption_value_eur,
     current_circularity_rate_pct,
     potential_circularity_rate_pct,
+    collection_rate_pct,
+    material_recovery_rate_pct,
     estimated_material_savings_tonnes,
-    estimated_monetary_savings_eur
+    estimated_monetary_savings_eur,
+    current_recycling_savings_tonnes,
+    current_recycling_savings_eur
 }
