@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 title: CirQuant
 type: software
-doi: 10.17605/OSF.IO/U6SF3
+doi: --tobeobtained--
 authors:
   - given-names: Riccardo
     family-names: Boero
@@ -10,7 +10,7 @@ authors:
     affiliation: NILU
 identifiers:
   - type: doi
-    value: 10.17605/OSF.IO/U6SF3
+    value: --tobeobtained--
     description: This DOI represents all software versions.
 repository-code: 'https://github.com/equicirco/cirquant'
 url: 'http://equicirco.github.io/cirquant'
