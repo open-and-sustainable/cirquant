@@ -32,8 +32,7 @@ nace_rev2 = ["28.25.13.80"]
 [products.product_key.parameters]
 weight_kg = 100.0
 unit = "piece"
-current_circularity_rate = 5.0
-potential_circularity_rate = 45.0
+current_refurbishment_rate = 1.0
 ```
 
 ### 1.1 Product block
@@ -45,12 +44,24 @@ potential_circularity_rate = 45.0
 ### 1.2 Parameters block
 - `weight_kg` *(Float)* – Average product mass per unit. Enables conversion from pieces to tonnes when data only reports counts.
 - `unit` *(String)* – Native PRODCOM unit (e.g., `piece`, `set`, `kg`). Used for validation, not for conversions.
-- `current_circularity_rate` *(Float, %)* – Share of apparent consumption currently refurbished or recycled. Placeholder until official statistics are integrated.
-- `potential_circularity_rate` *(Float, %)* – Research-based outlook for the same strategy. Drives the “potential” indicators.
+- `current_refurbishment_rate` *(Float, %)* – Estimated current refurbishment share used for strategy-specific indicators.
 
 **Constraints**
-- Rates are expressed from 0 to 100. Validate that `potential ≥ current`.
-- Refurbishment and recycling are modelled through the same fields; if both strategies are analysed separately, define additional products or document how the split is handled.
+- Rates are expressed from 0 to 100.
+- Refurbishment and recycling are modelled separately; refurbishment uses dedicated rates while recycling uses collection and recovery rates.
+
+### 1.3 Global circularity uplift
+
+When potential rates are not product-specific, define a global uplift used to derive potential savings:
+
+```toml
+[circularity_uplift]
+mean = 10.0
+min = 5.0
+max = 20.0
+```
+
+The uplift is applied as percentage points on top of the derived current circularity rate (refurbishment + recycling). Min/max bounds are used for sensitivity ranges.
 
 ## 2. Research vs data-driven inputs
 
@@ -81,8 +92,7 @@ Only the first row is edited manually; the rest are fetched or calculated and wr
 - **`unit`**: Mirrors the PRODCOM unit description. Helps analysts interpret the `weight_kg` assumption.
 
 ### 3.4 Circular rates
-- **`current_circularity_rate`**: Snapshot of today’s refurbishment/recycling performance. Defaults can be conservative placeholders.
-- **`potential_circularity_rate`**: Ambition or technical potential used for scenario analysis. Must be evidence-based (policy target, industry roadmap, etc.).
+- **Derived circularity**: Current circularity is computed from refurbishment and recycling rates (collection × recovery).
 
 ## 4. Runtime handling
 
@@ -95,9 +105,9 @@ Only the first row is edited manually; the rest are fetched or calculated and wr
 from ci = circularity_indicators_{{YEAR}}
 join p = parameters_circularity_rate (ci.product_code == p.product_code)
 derive {
-    potential_rate_pct = p.potential_circularity_rate,
+    potential_rate_pct = LEAST(100.0, current_rate + p.circularity_uplift_mean),
     potential_savings_tonnes = apparent_consumption_tonnes *
-        (p.potential_circularity_rate - p.current_circularity_rate) / 100
+        p.circularity_uplift_mean / 100
 }
 ```
 
@@ -106,7 +116,7 @@ derive {
 Although not configured directly, several metrics depend on the parameters above:
 
 - **Material recovery rate** = Σ(material share × material recovery efficiency). Requires composition + recovery tables.
-- **Refurbishment savings** = `potential_rate × apparent_consumption`. Assumes 100% material preservation.
+- **Refurbishment savings** = `current_refurbishment_rate × apparent_consumption`. Assumes 100% material preservation.
 - **Recycling savings** = `collection_rate × material_recovery_rate × apparent_consumption`.
 - **Value equivalents** = Multiply tonnage savings by `apparent_consumption_value_eur`.
 

@@ -14,7 +14,7 @@ Use the [Parameters Reference](parameters-reference/) for field-level details an
 Each product entry answers two questions:
 
 1. **Scope** – Which products are in focus? Defined via PRODCOM and HS codes plus a descriptive name.
-2. **Potential** – What share of apparent consumption can realistically be refurbished or recycled? Captured through the `current_circularity_rate` and `potential_circularity_rate` fields inside each product’s `parameters` table, along with optional weight assumptions.
+2. **Potential** – What additional share of apparent consumption can realistically be refurbished or recycled? Captured through the global `circularity_uplift` values along with optional weight assumptions.
 
 Everything else (e.g., observed collection rates, material composition, recovery efficiencies) is fetched from statistical sources and therefore kept out of the configuration file.
 
@@ -25,8 +25,7 @@ Everything else (e.g., observed collection rates, material composition, recovery
 | `prodcom_codes` | Eurostat PRODCOM catalogue, correspondence tables | Always include dots (`28.21.13.30`). Avoid placeholders or aggregate prefixes unless Eurostat publishes them as valid codes. |
 | `hs_codes` | Eurostat COMEXT metadata, WCO HS explanatory notes | Provide every HS6 needed to capture imports/exports for the selected product. |
 | `weight_kg` | Manufacturer datasheets, PRODCOM-derived averages | Only required when official data lacks mass units. |
-| `current_circularity_rate` | Eurostat waste statistics, industry surveys, SME interviews | Can be provisional placeholders until official statistics are integrated. |
-| `potential_circularity_rate` | Systematic literature reviews, policy targets, expert elicitation | Should reflect technical/economic potential; cite sources in comments or commit messages. |
+| `current_refurbishment_rate` | Expert judgment, case studies | Low baseline refurbishment share used for strategy indicators. |
 
 ### 1.2 PRODCOM nomenclature epochs
 
@@ -74,8 +73,12 @@ nace_rev2 = ["28.25.13.80"]
 [products.product_key.parameters]
 weight_kg = 100.0
 unit = "piece"
-current_circularity_rate = 5.0
-potential_circularity_rate = 45.0
+current_refurbishment_rate = 1.0
+
+[circularity_uplift]
+mean = 10.0
+min = 5.0
+max = 20.0
 ```
 
 - `products.product_key` – use descriptive snake_case keys (e.g., `batteries_li_ion`). Keys appear in logs and database table names.
@@ -85,6 +88,8 @@ potential_circularity_rate = 45.0
 - `hs_codes` – array of HS codes with dots for readability (COMEXT always strips dots internally).
 - `weee_waste_codes` (optional) – Eurostat WEEE category identifiers used to filter `env_waselee` fetches.
 - `parameters` – nested table storing weights and circularity assumptions. `unit` mirrors the PRODCOM unit description to help interpret `weight_kg`.
+- `current_refurbishment_rate` – strategy-specific refurbishment rate used in `circularity_indicators_by_strategy_YYYY`.
+- `circularity_uplift` – global uplift applied to the derived current circularity rate when computing potential savings.
 
 ## 3. Defining or updating products
 
@@ -117,8 +122,12 @@ nace_rev2 = ["27.11.50.00"]
 [products.solar_inverters.parameters]
 weight_kg = 35.0                       # Manufacturer data sheet
 unit = "piece"
-current_circularity_rate = 8.0         # Industry survey (2023)
-potential_circularity_rate = 60.0      # Literature review on repair/refurb potential
+current_refurbishment_rate = 1.0       # Industry survey (2023)
+
+[circularity_uplift]
+mean = 10.0                            # Literature review on circularity improvement
+min = 5.0
+max = 20.0
 ```
 
 ## 4. Validation workflow
@@ -130,8 +139,8 @@ validate_product_config()
 
 Validation checks that:
 - Required fields exist and use the correct data types.
-- `potential_circularity_rate` and `current_circularity_rate` fall within 0–100.
-- `potential >= current`.
+- `current_refurbishment_rate` falls within 0–100.
+- `circularity_uplift` values fall within 0–100.
 - Product IDs remain unique, every epoch lists at least one PRODCOM code, and epoch definitions specify valid year ranges.
 
 Fix any reported issues before continuing; downstream scripts assume a valid configuration.

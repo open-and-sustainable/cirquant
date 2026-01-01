@@ -17,6 +17,7 @@ Computation and transformation remain the main focus, with the data development 
 
 Step 1 (material-weighted recovery rates) is now implemented using UMP sankey-derived composition and recovery tables.
 Step 2 (current recycling material savings) is now implemented using WEEE collection rates and UMP-derived recovery rates.
+Step 3 (strategy-specific indicators) is now implemented via `circularity_indicators_by_strategy_YYYY`.
 
 Note: Current refurbishment rates remain largely unknown/estimated
 

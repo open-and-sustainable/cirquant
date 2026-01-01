@@ -99,6 +99,11 @@ The following datasets extend the analysis but have not yet been loaded into the
   - `material_recycling_rates_YYYY` (material recovery rates per WEEE category)
   - `product_material_recovery_rates_YYYY` (material-weighted recovery rate per product)
 - **Fallback** – If UMP sankey data is missing for a year, the most recent prior year is reused and logged.
+
+### 4.5 Global circularity uplift
+
+- **Source** – Systematic review results providing a single uplift distribution (mean/min/max).
+- **Use** – Applied to the derived current circularity rate to produce potential circularity ranges in processed indicators.
 - **WEEE mapping** – UMP uses `WEEE_Cat*` categories. CirQuant maps Eurostat-style WEEE codes in `config/products.toml` to UMP categories during fetch (see `src/DataFetch/UmpDataFetch.jl`):
   - `EE_TEE` → `WEEE_Cat1`
   - `EE_SME` → `WEEE_Cat5`

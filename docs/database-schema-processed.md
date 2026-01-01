@@ -28,6 +28,7 @@ These tables remain in the database after processing:
 - `product_material_composition_YYYY` - UMP-derived material composition by product
 - `material_recycling_rates_YYYY` - UMP-derived material recovery rates by WEEE category
 - `product_material_recovery_rates_YYYY` - Material-weighted recovery rates by product
+- `circularity_indicators_by_strategy_YYYY` - Strategy-specific circularity indicators
 
 ### Temporary Tables
 These tables are created during processing and removed in step 9:
@@ -58,11 +59,17 @@ Annual circularity indicators combining production and trade data.
 | apparent_consumption_tonnes | DOUBLE | Production + Imports - Exports |
 | apparent_consumption_value_eur | DOUBLE | Monetary value of apparent consumption |
 | current_circularity_rate_pct | DOUBLE | Current material recirculation rate (%) |
-| potential_circularity_rate_pct | DOUBLE | Achievable rate with innovations (%) |
+| potential_circularity_rate_pct | DOUBLE | Potential rate using uplift mean (%) |
+| potential_circularity_rate_pct_min | DOUBLE | Potential rate using uplift min (%) |
+| potential_circularity_rate_pct_max | DOUBLE | Potential rate using uplift max (%) |
 | collection_rate_pct | DOUBLE | Collection rate (%) used for recycling savings |
 | material_recovery_rate_pct | DOUBLE | Material recovery rate (%) used for recycling savings |
 | estimated_material_savings_tonnes | DOUBLE | Potential material savings |
 | estimated_monetary_savings_eur | DOUBLE | Estimated monetary savings |
+| estimated_material_savings_tonnes_min | DOUBLE | Potential material savings (min uplift) |
+| estimated_material_savings_tonnes_max | DOUBLE | Potential material savings (max uplift) |
+| estimated_monetary_savings_eur_min | DOUBLE | Estimated monetary savings (min uplift) |
+| estimated_monetary_savings_eur_max | DOUBLE | Estimated monetary savings (max uplift) |
 | current_recycling_savings_tonnes | DOUBLE | Current recycling material savings (tonnes) |
 | current_recycling_savings_eur | DOUBLE | Current recycling material savings (EUR) |
 
@@ -245,9 +252,32 @@ Stores product-specific circularity rate assumptions used in calculations.
 | Column | Type | Description |
 |--------|------|-------------|
 | product_code | VARCHAR | PRODCOM code without dots (e.g., "28211330") |
-| current_circularity_rate | DOUBLE | Current material recirculation rate for this product (%) |
-| potential_circularity_rate | DOUBLE | Achievable rate with innovations for this product (%) |
+| current_circularity_rate | DOUBLE | Reserved (not used; current circularity is derived downstream) |
+| circularity_uplift_mean | DOUBLE | Global uplift mean applied to current rate (%) |
+| circularity_uplift_min | DOUBLE | Global uplift min applied to current rate (%) |
+| circularity_uplift_max | DOUBLE | Global uplift max applied to current rate (%) |
+| current_refurbishment_rate | DOUBLE | Current refurbishment rate for this product (%) |
 | last_updated | VARCHAR | Timestamp of last parameter update |
+
+### Table: `circularity_indicators_by_strategy_YYYY`
+
+Strategy-specific circularity indicators for refurbishment and recycling.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| product_code | VARCHAR | PRODCOM code without dots |
+| year | INTEGER | Reference year |
+| geo | VARCHAR | Country code or "EU27" |
+| level | VARCHAR | "country" or "EU" aggregate |
+| strategy | VARCHAR | `refurbishment` or `recycling` |
+| rate_pct | DOUBLE | Strategy rate (%) used for savings |
+| material_recovery_rate_pct | DOUBLE | Material recovery rate (%) for recycling |
+| apparent_consumption_tonnes | DOUBLE | Apparent consumption (tonnes) |
+| apparent_consumption_value_eur | DOUBLE | Apparent consumption (EUR) |
+| material_savings_tonnes | DOUBLE | Strategy material savings (tonnes) |
+| material_savings_eur | DOUBLE | Strategy material savings (EUR) |
+| production_reduction_tonnes | DOUBLE | Avoided production (tonnes) |
+| production_reduction_eur | DOUBLE | Avoided production (EUR) |
 
 ### Table: `parameters_recovery_efficiency` (Optional)
 

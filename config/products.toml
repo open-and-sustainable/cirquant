@@ -14,6 +14,12 @@ start_year = 2008
 end_year = 2100
 description = "Codes used in the 2008 and later PRODCOM/EuroProMS datasets."
 
+[circularity_uplift]
+# Global uplift in circularity rates (% points). Used to derive potential rates.
+mean = 0.0
+min = 0.0
+max = 0.0
+
 [products.heat_pumps]
 id = 1
 name = "Heat pumps"
@@ -28,8 +34,7 @@ nace_rev2 = ["28.25.13.80"]
  # Fallback average unit weight (kg). Used only when no data-driven weight can be derived for a given year.
  weight_kg = 100.0
  unit = "piece"
- current_circularity_rate = 5.0
- potential_circularity_rate = 45.0
+ current_refurbishment_rate = 1.0
 
 [products.pv_panels]
 id = 2
@@ -44,8 +49,7 @@ nace_rev2 = ["26.11.22.40"]
 [products.pv_panels.parameters]
 weight_kg = 20.0
 unit = "piece"
-current_circularity_rate = 3.0
-potential_circularity_rate = 65.0
+current_refurbishment_rate = 0.5
 
 [products.printers]
 id = 3
@@ -60,8 +64,7 @@ nace_rev2 = ["26.20.18.00"]
 [products.printers.parameters]
 weight_kg = 15.0
 unit = "piece"
-current_circularity_rate = 2.0
-potential_circularity_rate = 40.0
+current_refurbishment_rate = 1.0
 
 [products.smartphones]
 id = 4
@@ -76,8 +79,7 @@ nace_rev2 = ["26.30.22.00"]
 [products.smartphones.parameters]
 weight_kg = 0.2
 unit = "piece"
-current_circularity_rate = 1.0
-potential_circularity_rate = 35.0
+current_refurbishment_rate = 0.5
 
 [products.other_phones]
 id = 5
@@ -92,8 +94,7 @@ nace_rev2 = ["26.30.22.00"]
 [products.other_phones.parameters]
 weight_kg = 0.3
 unit = "piece"
-current_circularity_rate = 1.0
-potential_circularity_rate = 30.0
+current_refurbishment_rate = 0.5
 
 [products.portable_computers]
 id = 6
@@ -108,8 +109,7 @@ nace_rev2 = ["26.20.11.00"]
 [products.portable_computers.parameters]
 weight_kg = 2.0
 unit = "piece"
-current_circularity_rate = 2.0
-potential_circularity_rate = 45.0
+current_refurbishment_rate = 1.5
 
 [products.other_computers]
 id = 7
@@ -124,8 +124,7 @@ nace_rev2 = ["26.20.13.00", "26.20.14.00"]
 [products.other_computers.parameters]
 weight_kg = 8.0
 unit = "piece"
-current_circularity_rate = 2.0
-potential_circularity_rate = 45.0
+current_refurbishment_rate = 1.0
 
 [products.monitors_io]
 id = 8
@@ -140,8 +139,7 @@ nace_rev2 = ["26.20.17.00", "26.20.16.50", "26.20.16.60"]
 [products.monitors_io.parameters]
 weight_kg = 5.0
 unit = "piece"
-current_circularity_rate = 3.0
-potential_circularity_rate = 50.0
+current_refurbishment_rate = 1.0
 
 [products.storage_units]
 id = 9
@@ -156,8 +154,7 @@ nace_rev2 = ["26.20.21.00"]
 [products.storage_units.parameters]
 weight_kg = 1.0
 unit = "piece"
-current_circularity_rate = 2.0
-potential_circularity_rate = 40.0
+current_refurbishment_rate = 1.0
 
 [products.other_ict_units]
 id = 10
@@ -172,8 +169,7 @@ nace_rev2 = ["26.20.30.00"]
 [products.other_ict_units.parameters]
 weight_kg = 3.0
 unit = "piece"
-current_circularity_rate = 2.0
-potential_circularity_rate = 35.0
+current_refurbishment_rate = 1.0
 
 [products.full_ict]
 id = 11
@@ -188,8 +184,7 @@ nace_rev2 = ["26.20"]
 [products.full_ict.parameters]
 weight_kg = 5.0
 unit = "piece"
-current_circularity_rate = 2.0
-potential_circularity_rate = 40.0
+current_refurbishment_rate = 1.0
 
 [products.batteries_li_ion]
 id = 12
@@ -204,8 +199,7 @@ nace_rev2 = ["27.20.23.00"]
 [products.batteries_li_ion.parameters]
 weight_kg = 0.5
 unit = "piece"
-current_circularity_rate = 10.0
-potential_circularity_rate = 70.0
+current_refurbishment_rate = 0.2
 
 [products.batteries_other]
 id = 13
@@ -220,5 +214,4 @@ nace_rev2 = ["27.20.21.00", "27.20.22.10", "27.20.22.50", "27.20.23.00"]
 [products.batteries_other.parameters]
 weight_kg = 1.0
 unit = "piece"
-current_circularity_rate = 8.0
-potential_circularity_rate = 60.0
+current_refurbishment_rate = 0.2

@@ -246,7 +246,6 @@ Load analysis parameters from the products.toml configuration file.
 # Returns
 - `Dict{String, Any}`: Analysis parameters dictionary containing:
   - `current_circularity_rates`: Dict mapping PRODCOM codes to current circularity rates
-  - `potential_circularity_rates`: Dict mapping PRODCOM codes to potential circularity rates
   - `product_weights_tonnes`: Dict mapping PRODCOM codes to product weights in tonnes
   - `placeholder_for_future_params`: Empty Dict for future parameters
 
@@ -260,8 +259,7 @@ function load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
     config = TOML.parsefile(config_path)
 
     # Initialize the dictionaries
-    current_circularity_rates = Dict{String, Float64}()
-    potential_circularity_rates = Dict{String, Float64}()
+    current_refurbishment_rates = Dict{String, Float64}()
     product_weights_tonnes = Dict{String, Float64}()
 
     # Extract products section
@@ -279,9 +277,8 @@ function load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
             # Get parameters
             params = product_data["parameters"]
 
-            # Add circularity rates
-            current_circularity_rates[clean_code] = params["current_circularity_rate"]
-            potential_circularity_rates[clean_code] = params["potential_circularity_rate"]
+            # Add refurbishment rates
+            current_refurbishment_rates[clean_code] = params["current_refurbishment_rate"]
 
             # Convert weight from kg to tonnes
             weight_tonnes = params["weight_kg"] / 1000.0
@@ -290,10 +287,16 @@ function load_analysis_parameters(config_path::String = PRODUCTS_CONFIG_PATH)
     end
 
     # Create the final dictionary structure matching ANALYSIS_PARAMETERS
+    # Load global circularity uplift (optional)
+    uplift_config = get(config, "circularity_uplift", Dict())
+    uplift_mean = get(uplift_config, "mean", 0.0)
+    uplift_min = get(uplift_config, "min", 0.0)
+    uplift_max = get(uplift_config, "max", 0.0)
+
     return Dict{String, Any}(
-        "current_circularity_rates" => current_circularity_rates,
-        "potential_circularity_rates" => potential_circularity_rates,
+        "current_refurbishment_rates" => current_refurbishment_rates,
         "product_weights_tonnes" => product_weights_tonnes,
+        "circularity_uplift" => Dict("mean" => uplift_mean, "min" => uplift_min, "max" => uplift_max),
         "placeholder_for_future_params" => Dict{String, Any}()
     )
 end
@@ -442,7 +445,11 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
 
     # Required fields for each product
     required_product_fields = ["id", "name", "prodcom_codes", "hs_codes", "parameters"]
-    required_param_fields = ["weight_kg", "unit", "current_circularity_rate", "potential_circularity_rate"]
+    required_param_fields = [
+        "weight_kg",
+        "unit",
+        "current_refurbishment_rate"
+    ]
 
     # Validate each product
     for (product_key, product_data) in products
@@ -560,35 +567,19 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
             end
         end
 
-        if haskey(params, "current_circularity_rate")
-            current_rate = params["current_circularity_rate"]
-            if !(current_rate isa Number)
-                push!(errors, "Product '$product_key' current_circularity_rate must be a number")
+
+
+        if haskey(params, "current_refurbishment_rate")
+            current_refurb = params["current_refurbishment_rate"]
+            if !(current_refurb isa Number)
+                push!(errors, "Product '$product_key' current_refurbishment_rate must be a number")
                 is_valid = false
-            elseif current_rate < 0 || current_rate > 100
-                push!(errors, "Product '$product_key' current_circularity_rate must be between 0 and 100, got: $current_rate")
+            elseif current_refurb < 0 || current_refurb > 100
+                push!(errors, "Product '$product_key' current_refurbishment_rate must be between 0 and 100, got: $current_refurb")
                 is_valid = false
             end
         end
 
-        if haskey(params, "potential_circularity_rate")
-            potential_rate = params["potential_circularity_rate"]
-            if !(potential_rate isa Number)
-                push!(errors, "Product '$product_key' potential_circularity_rate must be a number")
-                is_valid = false
-            elseif potential_rate < 0 || potential_rate > 100
-                push!(errors, "Product '$product_key' potential_circularity_rate must be between 0 and 100, got: $potential_rate")
-                is_valid = false
-            end
-
-            # Check that potential >= current
-            if haskey(params, "current_circularity_rate") &&
-               (current_rate isa Number) && (potential_rate isa Number) &&
-               potential_rate < params["current_circularity_rate"]
-                push!(errors, "Product '$product_key' potential_circularity_rate ($potential_rate) must be >= current_circularity_rate ($(params["current_circularity_rate"]))")
-                is_valid = false
-            end
-        end
     end
 
     # Report results
@@ -608,6 +599,24 @@ function validate_product_config(config_path::String = PRODUCTS_CONFIG_PATH)
 
     if is_valid && isempty(errors)
         #@info "Configuration validation passed successfully for $(length(products)) products"
+    end
+
+    if haskey(config, "circularity_uplift")
+        uplift = config["circularity_uplift"]
+        for field in ["mean", "min", "max"]
+            if !haskey(uplift, field)
+                push!(errors, "Missing circularity_uplift.$field in configuration file")
+                is_valid = false
+            elseif !(uplift[field] isa Number)
+                push!(errors, "circularity_uplift.$field must be a number")
+                is_valid = false
+            elseif uplift[field] < 0 || uplift[field] > 100
+                push!(errors, "circularity_uplift.$field must be between 0 and 100, got: $(uplift[field])")
+                is_valid = false
+            end
+        end
+    else
+        push!(warnings, "Missing circularity_uplift section; defaulting to 0.0 uplift")
     end
 
     return is_valid

@@ -191,6 +191,9 @@ function process_year_complete(year::Int, config::ProcessingConfig)
     # Step 8c: Build unit value table (EUR per unit/kg) using product weights and trade/production values
     step8c_build_unit_values(year, config, target_conn)
 
+    # Step 8d: Build strategy-specific circularity indicators
+    step8d_create_strategy_indicators(year, config, target_conn)
+
     # Step 9: Clean up temporary tables
     step9_cleanup_temp_tables(year, config, target_conn)
 
@@ -1206,6 +1209,141 @@ function step8c_build_unit_values(year::Int, config::ProcessingConfig, target_co
 end
 
 """
+    step8d_create_strategy_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+
+Create strategy-specific circularity indicators table.
+Creates table: circularity_indicators_by_strategy_YYYY
+"""
+function step8d_create_strategy_indicators(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
+    @info "Step 8d: Building strategy-specific indicators for $year..."
+
+    ci_table = "circularity_indicators_$(year)"
+    params_table = "parameters_circularity_rate"
+    coll_table = "product_collection_rates_$(year)"
+    rec_table = "product_material_recovery_rates_$(year)"
+
+    if !DatabaseAccess.table_exists(config.target_db, ci_table)
+        @warn "Missing $ci_table; skipping strategy indicators"
+        return
+    end
+
+    if !DatabaseAccess.table_exists(config.target_db, params_table)
+        @warn "Missing $params_table; skipping strategy indicators"
+        return
+    end
+
+    ci_df = DataFrame(DBInterface.execute(target_conn, "SELECT * FROM \"$ci_table\""))
+    params_df = DataFrame(DBInterface.execute(target_conn, """
+        SELECT product_code, current_refurbishment_rate
+        FROM "$params_table"
+    """))
+
+    coll_df = DatabaseAccess.table_exists(config.target_db, coll_table) ?
+              DataFrame(DBInterface.execute(target_conn, "SELECT product_code, geo, collection_rate_pct FROM \"$coll_table\"")) :
+              DataFrame(product_code=String[], geo=String[], collection_rate_pct=Float64[])
+
+    rec_df = DatabaseAccess.table_exists(config.target_db, rec_table) ?
+             DataFrame(DBInterface.execute(target_conn, "SELECT product_code, geo, material_recovery_rate_pct FROM \"$rec_table\"")) :
+             DataFrame(product_code=String[], geo=String[], material_recovery_rate_pct=Float64[])
+
+    params_lookup = Dict{String,Float64}()
+    for row in eachrow(params_df)
+        params_lookup[String(row.product_code)] = Float64(row.current_refurbishment_rate)
+    end
+
+    coll_lookup = Dict{Tuple{String,String},Float64}()
+    for row in eachrow(coll_df)
+        coll_lookup[(String(row.product_code), String(row.geo))] = Float64(row.collection_rate_pct)
+    end
+
+    rec_lookup = Dict{String,Float64}()
+    for row in eachrow(rec_df)
+        if String(row.geo) == UMP_GEO_FALLBACK
+            rec_lookup[String(row.product_code)] = Float64(row.material_recovery_rate_pct)
+        end
+    end
+
+    result = DataFrame(
+        product_code=String[],
+        year=Int[],
+        geo=String[],
+        level=String[],
+        strategy=String[],
+        rate_pct=Union{Float64,Missing}[],
+        material_recovery_rate_pct=Union{Float64,Missing}[],
+        apparent_consumption_tonnes=Union{Float64,Missing}[],
+        apparent_consumption_value_eur=Union{Float64,Missing}[],
+        material_savings_tonnes=Union{Float64,Missing}[],
+        material_savings_eur=Union{Float64,Missing}[],
+        production_reduction_tonnes=Union{Float64,Missing}[],
+        production_reduction_eur=Union{Float64,Missing}[]
+    )
+
+    for row in eachrow(ci_df)
+        product_code = String(row.product_code)
+        geo = String(row.geo)
+        level = String(row.level)
+        apparent_tonnes = row.apparent_consumption_tonnes
+        apparent_value = row.apparent_consumption_value_eur
+
+        refurb_rate = get(params_lookup, product_code, 0.0)
+
+        refurb_savings_tonnes = (apparent_tonnes isa Number) ? Float64(apparent_tonnes) * refurb_rate / 100.0 : missing
+        refurb_savings_eur = (apparent_value isa Number) ? Float64(apparent_value) * refurb_rate / 100.0 : missing
+
+        push!(result, (
+            product_code=product_code,
+            year=year,
+            geo=geo,
+            level=level,
+            strategy="refurbishment",
+            rate_pct=refurb_rate,
+            material_recovery_rate_pct=missing,
+            apparent_consumption_tonnes=apparent_tonnes,
+            apparent_consumption_value_eur=apparent_value,
+            material_savings_tonnes=refurb_savings_tonnes,
+            material_savings_eur=refurb_savings_eur,
+            production_reduction_tonnes=refurb_savings_tonnes,
+            production_reduction_eur=refurb_savings_eur
+        ))
+
+        collection_rate = get(coll_lookup, (product_code, geo), get(coll_lookup, (product_code, UMP_GEO_FALLBACK), missing))
+        recovery_rate = get(rec_lookup, product_code, missing)
+
+        if collection_rate isa Number && recovery_rate isa Number && apparent_tonnes isa Number
+            recycle_savings_tonnes = Float64(apparent_tonnes) * Float64(collection_rate) / 100.0 * Float64(recovery_rate) / 100.0
+        else
+            recycle_savings_tonnes = missing
+        end
+
+        if collection_rate isa Number && recovery_rate isa Number && apparent_value isa Number
+            recycle_savings_eur = Float64(apparent_value) * Float64(collection_rate) / 100.0 * Float64(recovery_rate) / 100.0
+        else
+            recycle_savings_eur = missing
+        end
+
+        push!(result, (
+            product_code=product_code,
+            year=year,
+            geo=geo,
+            level=level,
+            strategy="recycling",
+            rate_pct=collection_rate,
+            material_recovery_rate_pct=recovery_rate,
+            apparent_consumption_tonnes=apparent_tonnes,
+            apparent_consumption_value_eur=apparent_value,
+            material_savings_tonnes=recycle_savings_tonnes,
+            material_savings_eur=recycle_savings_eur,
+            production_reduction_tonnes=0.0,
+            production_reduction_eur=0.0
+        ))
+    end
+
+    table_name = "circularity_indicators_by_strategy_$(year)"
+    DatabaseAccess.write_duckdb_table_with_connection!(result, target_conn, table_name)
+end
+
+"""
     step9_cleanup_temp_tables(year::Int, config::ProcessingConfig, target_conn::DuckDB.Connection)
 
 Step 9: Clean up temporary tables created during processing.
@@ -1312,28 +1450,40 @@ Create or update the circularity parameters table from ANALYSIS_PARAMETERS.
 """
 function ensure_circularity_parameters_table_with_connection(config::ProcessingConfig, conn::DuckDB.Connection)
     # Extract circularity rates from config
-    current_rates = get(config.analysis_params, "current_circularity_rates", Dict())
-    potential_rates = get(config.analysis_params, "potential_circularity_rates", Dict())
+    current_refurb = get(config.analysis_params, "current_refurbishment_rates", Dict())
+    uplift = get(config.analysis_params, "circularity_uplift", Dict())
+    uplift_mean = Float64(get(uplift, "mean", 0.0))
+    uplift_min = Float64(get(uplift, "min", 0.0))
+    uplift_max = Float64(get(uplift, "max", 0.0))
 
     # Create DataFrame with product-specific rates
     product_codes = String[]
     current_rates_vec = Float64[]
-    potential_rates_vec = Float64[]
+    uplift_mean_vec = Float64[]
+    uplift_min_vec = Float64[]
+    uplift_max_vec = Float64[]
+    current_refurb_vec = Float64[]
 
     # Collect all product codes from both dictionaries
-    all_products = union(keys(current_rates), keys(potential_rates))
+    all_products = keys(current_refurb)
 
     for product_code in all_products
         push!(product_codes, product_code)
-        push!(current_rates_vec, get(current_rates, product_code, 0.0))
-        push!(potential_rates_vec, get(potential_rates, product_code, 30.0))
+        push!(current_rates_vec, 0.0)
+        push!(uplift_mean_vec, uplift_mean)
+        push!(uplift_min_vec, uplift_min)
+        push!(uplift_max_vec, uplift_max)
+        push!(current_refurb_vec, get(current_refurb, product_code, 0.0))
     end
 
     # Create DataFrame with one row per product
     circularity_params_df = DataFrame(
         product_code=product_codes,
         current_circularity_rate=current_rates_vec,
-        potential_circularity_rate=potential_rates_vec,
+        circularity_uplift_mean=uplift_mean_vec,
+        circularity_uplift_min=uplift_min_vec,
+        circularity_uplift_max=uplift_max_vec,
+        current_refurbishment_rate=current_refurb_vec,
         last_updated=fill(Dates.format(now(), "yyyy-mm-dd HH:MM:SS.sss"), length(product_codes))
     )
 
