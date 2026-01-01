@@ -1174,7 +1174,11 @@ function step8c_build_unit_values(year::Int, config::ProcessingConfig, target_co
 
     for row in eachrow(pt_df)
         key = (String(row.product_code), String(row.geo))
-        weight_info = get(weights_lookup, key, get(weights_lookup, (key[1], "EU27_2020"), (0.0, missing)))
+        weight_info = get(
+            weights_lookup,
+            key,
+            get(weights_lookup, (key[1], "EU27_2020"), (weight_kg=0.0, unit_counts=missing))
+        )
         weight = weight_info.weight_kg
         counts_hint = weight_info.unit_counts
 
