@@ -4,6 +4,8 @@ CirQuant quantifies the **circular economy potential** of strategic product cate
 
 Code documentation is available at [https://equicirco.github.io/cirquant](https://equicirco.github.io/cirquant).
 
+Resulting databases are available at [https://git.nilu.no/ribo/CirQuant-database](https://git.nilu.no/ribo/CirQuant-database).
+
 ## Citation
 
 If you use CirQuant in academic work, please cite it. The following LaTeX block reflects [`CITATION.cff`](CITATION.cff):
