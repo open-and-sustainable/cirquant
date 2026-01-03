@@ -28,8 +28,19 @@ function fetch_product_collection_rates_data(years_range="2010-2024"; db_path::S
     selected = isnothing(filter_keys) ? mapping_df : filter(:product => (p -> string(p) in filter_keys), mapping_df)
     weee_codes = Set{String}()
     for row in eachrow(selected)
-        for code in get(row, :weee_waste_codes, String[])
-            push!(weee_codes, String(code))
+        codes = get(row, :weee_waste_codes, String[])
+        if codes isa AbstractString
+            for code in split(String(codes), ",")
+                code = strip(code)
+                isempty(code) && continue
+                push!(weee_codes, code)
+            end
+        else
+            for code in codes
+                code_str = strip(string(code))
+                isempty(code_str) && continue
+                push!(weee_codes, code_str)
+            end
         end
     end
 

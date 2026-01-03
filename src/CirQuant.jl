@@ -89,7 +89,8 @@ function fetch_comext_data(years_str::String="2010-2024"; custom_datasets=nothin
 end
 
 """
-    fetch_combined_data(years_str::String="2010-2024", prodcom_datasets=nothing, comext_datasets=nothing)
+    fetch_combined_data(years_str::String="2010-2024", prodcom_datasets=nothing, comext_datasets=nothing;
+                        db_path=nothing, product_keys_filter=nothing)
 
 Fetches all data types for circular economy analysis for the same year range.
 This includes PRODCOM, COMEXT, and all circular economy specific datasets.
@@ -101,37 +102,41 @@ Parameters:
                      If not provided, defaults to ["ds-059358"].
 - `comext_datasets`: Optional. Array of Comext dataset IDs to fetch.
                     If not provided, defaults to ["DS-059341"].
+- `db_path`: Optional database path override (e.g., test database).
+- `product_keys_filter`: Optional product key subset for WEEE/UMP filters.
 
 Returns:
 - true on successful completion
 """
-function fetch_combined_data(years_str::String="2010-2024", prodcom_datasets=nothing, comext_datasets=nothing)
+function fetch_combined_data(years_str::String="2010-2024", prodcom_datasets=nothing, comext_datasets=nothing;
+    db_path=nothing, product_keys_filter=nothing)
     @info "Starting combined data fetch for all data sources for years $years_str"
+    target_db = isnothing(db_path) ? DB_PATH_RAW : db_path
 
     try
         # Step 1: Fetch PRODCOM data
         @info "Step 1/6: Fetching PRODCOM data..."
-        fetch_prodcom_data(years_str, prodcom_datasets)
+        fetch_prodcom_data(years_str, prodcom_datasets; db_path=target_db, product_keys_filter=product_keys_filter)
         @info "PRODCOM fetch completed."
 
         # Step 2: Fetch COMEXT data
         @info "Step 2/6: Fetching COMEXT data..."
-        fetch_comext_data(years_str; custom_datasets=comext_datasets)
+        fetch_comext_data(years_str; custom_datasets=comext_datasets, db_path=target_db, product_keys_filter=product_keys_filter)
         @info "COMEXT fetch completed."
 
         # Step 3: Fetch material recycling rates
         @info "Step 3/5: Fetching material recycling rates..."
-        fetch_material_recycling_rates_data(years_str)
+        fetch_material_recycling_rates_data(years_str; db_path=target_db)
         @info "Material recycling rates fetch completed (stub)."
 
         # Step 4: Fetch product collection rates
         @info "Step 4/5: Fetching product collection rates..."
-        fetch_product_collection_rates_data(years_str)
+        fetch_product_collection_rates_data(years_str; db_path=target_db, product_keys_filter=product_keys_filter)
         @info "Product collection rates fetch completed (stub)."
 
         # Step 5: Fetch Urban Mine Platform historical WEEE observations
         @info "Step 5/5: Fetching UMP WEEE historical data..."
-        fetch_ump_weee_data()
+        fetch_ump_weee_data(; db_path=target_db, years_range=years_str, product_keys_filter=product_keys_filter)
         @info "UMP WEEE fetch completed."
 
         @info "All data fetching completed successfully!"
