@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 title: CirQuant
 message: >-
-  v0.1.0 - Full code implmentation and documentation.
+  v0.1.1 - Revision of UMP data fetching and docs.
 type: software
 doi: 10.5281/zenodo.18121735
 authors:
