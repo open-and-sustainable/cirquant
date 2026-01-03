@@ -99,7 +99,7 @@ Only the first row is edited manually; the rest are fetched or calculated and wr
 
 1. `validate_product_config()` checks schema compliance (required fields, numeric ranges, unique IDs, epoch definitions).
 2. The configuration is loaded into the `ANALYSIS_PARAMETERS` structure at package initialisation.
-3. During processing, parameter rows are written to `parameters_circularity_rate` (and `parameters_recovery_efficiency` if material-level data exists) in the processed DuckDB so downstream steps can join on them.
+3. During processing, parameter rows are written to `parameters_circularity_rate` (and `parameters_recovery_efficiency` only if a `recovery_efficiency` block is configured) in the processed DuckDB so downstream steps can join on them.
 4. PRQL scripts use these tables to compute refurbishment/recycling savings, e.g.:
 
 ```prql

@@ -99,7 +99,13 @@ Mapping between PRODCOM and HS classification systems.
 | product_id | INTEGER | Unique identifier |
 | product | VARCHAR | Product category name |
 | prodcom_code | VARCHAR | PRODCOM code (with dots, e.g., "27.11.40.00") |
+| prodcom_code_clean | VARCHAR | PRODCOM code without dots (e.g., "27114000") |
 | hs_codes | VARCHAR | Comma-separated HS codes (e.g., "8541.43") |
+| weee_waste_codes | VARCHAR | Comma-separated WEEE category codes (may be empty) |
+| prodcom_epoch | VARCHAR | Epoch key (e.g., `legacy`, `nace_rev2`) |
+| epoch_label | VARCHAR | Human-readable epoch label |
+| epoch_start_year | INTEGER | Epoch start year |
+| epoch_end_year | INTEGER | Epoch end year |
 
 ### Table: `country_code_mapping`
 
@@ -110,18 +116,6 @@ Mapping between PRODCOM numeric country codes and ISO 2-letter codes.
 | prodcom_code | VARCHAR | PRODCOM numeric code (e.g., "001" for France) |
 | iso_code | VARCHAR | ISO 2-letter code (e.g., "FR" for France) |
 | country_name | VARCHAR | Full country name |
-
-### Table: `prodcom_unit_conversions`
-
-Conversion factors for harmonizing different units to tonnes.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| prodcom_code | VARCHAR | PRODCOM code |
-| original_unit | VARCHAR | Original unit (KG, L, M3, etc.) |
-| conversion_factor | DOUBLE | Factor to convert to tonnes |
-| conversion_method | VARCHAR | Method used (direct, density-based, average) |
-| notes | VARCHAR | Additional conversion notes |
 
 ### Table: `country_aggregates_YYYY`
 
@@ -301,7 +295,7 @@ Material recovery efficiency rates by recycling method. This table is only creat
 
 ### Value Calculations
 - All monetary values in EUR
-- Missing values handled as zero values
+- Missing values are preserved where possible; some rate calculations coalesce missing components to zero for stability
 
 ### Derived Indicators
 1. **Apparent Consumption** = Production + Imports - Exports

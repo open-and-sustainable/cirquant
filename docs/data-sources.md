@@ -19,7 +19,7 @@ This note summarises every dataset currently (or soon to be) used by CirQuant an
 | **Material composition datasets** | Product bill-of-materials | `<dataset>_YYYY` (to be defined) | TBD | Under assessment (Ecodesign studies, PEF, LCA) |
 | **Derived weights** | Mass & counts per product | `product_weights_YYYY` (processed DB) | Derived annually | Combines config weights with PRODCOM counts and COMEXT mass |
 
-Only PRODCOM and COMEXT populate the raw DuckDB today; other sources will follow the same naming convention once integrated.
+The raw DuckDB now includes PRODCOM, COMEXT, Eurostat waste/collection datasets (`env_wastrt`, `env_waseleeos`, `env_waspb`), and UMP WEEE tables. Material composition inputs are still pending and will follow the same naming convention once integrated.
 
 ## 2. PRODCOM (Production statistics)
 
@@ -57,7 +57,7 @@ Indicator definitions:
 - Fetching options:
   - Parallel per-year fetch is available via `parallel_years=true` and `max_parallel_years` (defaults to 2). A shared rate limiter (`rate_limit_seconds`, `rate_limit_jitter`) is applied across workers to avoid API bursts.
   - The shell wrapper `fetch_data.sh` exposes these as env vars (e.g., `PARALLEL_YEARS=true MAX_PARALLEL_YEARS=2 RATE_LIMIT_SECONDS=0.6`).
-  - For a fast development snapshot, `fetch_test_data.sh "2022-2023" "heat_pumps,pv_panels"` writes to `CirQuant-database/raw/test.duckdb`; adjust `DB_PATH` to target another test database. Defaults use a slightly lower rate limit for quicker iterations.
+  - For a fast development snapshot, `fetch_test_data.sh "2022-2023" "heat_pumps,pv_panels"` runs the combined fetch against `CirQuant-database/raw/test.duckdb`; adjust `DB_PATH` to target another test database.
   - Limit scope with `product_keys_filter` (e.g., `["heat_pumps","pv_panels"]`) when calling `fetch_prodcom_data` to keep test downloads small and focused.
 
 ## 3. COMEXT (Trade statistics)

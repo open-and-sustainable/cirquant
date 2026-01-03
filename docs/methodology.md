@@ -31,7 +31,7 @@ This document describes how CirQuant quantifies circular economy potentials for 
 
 ## Processing Workflow
 
-1. **Acquisition** – Automatically download PRODCOM and COMEXT datasets for the specified years. Requests include rate limiting and retry logic to cope with API throttling.
+1. **Acquisition** – Automatically download PRODCOM/COMEXT plus waste and UMP datasets (env_wastrt, env_waseleeos, env_waspb, UMP WEEE) for the specified years. Requests include rate limiting and retry logic to cope with API throttling.
 2. **Raw storage** – Persist each dataset exactly as received in DuckDB tables named `prodcom_ds_<code>_<year>` and `comext_ds_<code>_<year>` for traceability.
 3. **Cleaning & unit handling** – Convert all quantities to tonnes whenever possible, apply consistent currencies (EUR), and run sanity checks on unit/value pairs.
 4. **Transformation via PRQL** – Parameterised PRQL scripts orchestrated from Julia perform the heavy lifting:
@@ -62,7 +62,7 @@ All assumptions reside in `config/products.toml`:
 - **Research-based rates** – potential refurbishment and recycling rates collected from studies, policy targets, or expert input.
 - **Data-driven inputs** – current collection rates, material composition, and weight estimates (progressively populated as new datasets are integrated).
 
-During runtime the configuration is validated, loaded into the `ANALYSIS_PARAMETERS` structure, and written to processed DuckDB tables such as `parameters_circularity_rate` and `parameters_recovery_efficiency`. PRQL queries join against these tables so that updating `products.toml` immediately affects indicator calculations without code changes.
+During runtime the configuration is validated, loaded into the `ANALYSIS_PARAMETERS` structure, and written to processed DuckDB tables such as `parameters_circularity_rate` (plus `parameters_recovery_efficiency` when a `recovery_efficiency` block is configured). PRQL queries join against these tables so that updating `products.toml` immediately affects indicator calculations without code changes.
 
 ## Limitations and Potential Issues
 

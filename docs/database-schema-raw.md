@@ -7,7 +7,7 @@ nav_order: 6
 
 ## Overview
 
-The raw database stores data exactly as fetched from Eurostat APIs without transformation. This preserves the original data structure and allows for full traceability.
+The raw database stores data as fetched from Eurostat APIs plus the UMP WEEE package, with only minimal normalization (e.g., UMP charts are reshaped to a long format) and added fetch metadata. This preserves traceability while keeping source-specific structures intact.
 
 **Database**: `CirQuant-database/raw/CirQuant_2010-2024.duckdb`
 
@@ -113,6 +113,13 @@ Key dimensions/columns (as returned by EurostatAPI):
 
 ### Table: `env_waseleeos_YYYY`
 WEEE open-scope collection/sales data (post-2018 categories).
+
+Key dimensions/columns:
+- `freq`, `waste`, `wst_oper`, `unit`, `geo`, `time`, `value`
+- Additional columns: `dataset`, `year`, `fetch_date`, `original_key`, `original_value`
+
+### Table: `env_waselee_YYYY`
+Legacy WEEE collection/sales data (pre-2018 categories).
 
 Key dimensions/columns:
 - `freq`, `waste`, `wst_oper`, `unit`, `geo`, `time`, `value`
