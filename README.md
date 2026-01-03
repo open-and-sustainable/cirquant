@@ -6,6 +6,9 @@ Code documentation is available at [https://equicirco.github.io/cirquant](https:
 
 Resulting databases are available at [https://git.nilu.no/ribo/CirQuant-database](https://git.nilu.no/ribo/CirQuant-database).
 
+Overall project introduction and materils are at [https://doi.org/10.17605/OSF.IO/U6SF3](https://doi.org/10.17605/OSF.IO/U6SF3).
+
+
 ## Citation
 
 If you use CirQuant in academic work, please cite it. The following LaTeX block reflects [`CITATION.cff`](CITATION.cff):
