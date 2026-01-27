@@ -1,37 +1,117 @@
 # PRQL query for extracting PRODCOM production data
-# This query extracts production volumes and values by product and country for a specific year
-# For now, only using the first dataset to avoid union issues
+# This query extracts production volumes (converted to tonnes) and values by product and country.
 
-from prodcom_ds_059358_{{YEAR}}
-# Filter for production indicators only and exclude unit values
-filter indicators == "PRODQNT" || indicators == "PRODVAL"
-filter value != "kg" && value != "p/st" && value != "pst" && value != "m" && value != "m2" && value != "m3" && value != "l" && value != "hl" && value != "ct/l"
+# QNTUNIT lookup (normalized)
+let unit_data = (
+    from prodcom_ds_059358_{{YEAR}}
+    filter indicators == "QNTUNIT"
+    select {
+        product_code = prccode,
+        unit_raw = value,
+        geo = reporter
+    }
+    derive {
+        unit = s"lower(unit_raw)"
+    }
+)
+
+let weight_data = (
+    from prodcom_unit_weights
+    select {
+        product_code,
+        weight_tonnes
+    }
+)
+
+# Quantities (PRODQNT), with unit conversion to tonnes
+let quantity_data = (
+    from prodcom_ds_059358_{{YEAR}}
+    filter indicators == "PRODQNT"
+    filter value != "kg" && value != "p/st" && value != "pst" && value != "m" && value != "m2" && value != "m3" && value != "l" && value != "hl" && value != "ct/l"
+    derive {
+        quantity_raw = s"TRY_CAST(value AS DOUBLE)"
+    }
+    filter quantity_raw != null
+    select {
+        product_code = prccode,
+        geo = reporter,
+        quantity_raw
+    }
+)
+
+let quantity_converted = (
+    from quantity_data
+    join side:left unit_data (quantity_data.product_code == unit_data.product_code && quantity_data.geo == unit_data.geo)
+    join side:left weight_data (quantity_data.product_code == weight_data.product_code)
+    derive {
+        conversion_factor = s"""
+            CASE
+                WHEN unit_data.unit = 'kg' THEN 0.001
+                WHEN unit_data.unit = 't' THEN 1.0
+                WHEN unit_data.unit IN ('p/st', 'pst') THEN
+                    CASE
+                        WHEN weight_data.weight_tonnes IS NOT NULL THEN weight_data.weight_tonnes
+                        ELSE 0.010
+                    END
+                WHEN unit_data.unit = 'ce/el' THEN 0.0003
+                WHEN unit_data.unit IS NULL THEN 0.001
+                ELSE 1.0
+            END
+        """,
+        production_volume_tonnes = quantity_data.quantity_raw * conversion_factor,
+        year = s"{{YEAR}}",
+        level = s"CASE WHEN quantity_data.geo LIKE 'EU%' THEN 'EU' ELSE 'country' END"
+    }
+    select {
+        q_product_code = quantity_data.product_code,
+        q_year = year,
+        q_geo = quantity_data.geo,
+        q_level = level,
+        production_volume_tonnes,
+        production_value_eur = null
+    }
+)
+
+# Values (PRODVAL)
+let value_data = (
+    from prodcom_ds_059358_{{YEAR}}
+    filter indicators == "PRODVAL"
+    derive {
+        production_value_eur = s"TRY_CAST(value AS DOUBLE)",
+        year = s"TRY_CAST(time AS INTEGER)",
+        level = s"CASE WHEN reporter LIKE 'EU%' THEN 'EU' ELSE 'country' END"
+    }
+    select {
+        v_product_code = s"TRIM(prccode)",
+        v_year = year,
+        v_geo = reporter,
+        v_level = level,
+        production_volume_tonnes = null,
+        production_value_eur
+    }
+)
+
+from quantity_converted
+join side:full value_data (q_product_code == v_product_code && q_geo == v_geo && q_year == v_year)
 derive {
-    # Convert value based on indicator type, using TRY_CAST to handle non-numeric values
-    production_volume_tonnes = s"CASE WHEN indicators = 'PRODQNT' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
-    production_value_eur = s"CASE WHEN indicators = 'PRODVAL' THEN TRY_CAST(value AS DOUBLE) ELSE NULL END",
-    # Ensure product code is clean
-    product_code_clean = s"TRIM(prccode)",
-    # Map time column to year
-    year = s"TRY_CAST(time AS INTEGER)",
-    # Derive level based on geo
-    level = s"CASE WHEN reporter = 'EU27' THEN 'EU' ELSE 'country' END"
+    product_code = s"COALESCE(q_product_code, v_product_code)",
+    year = s"COALESCE(q_year, v_year)",
+    geo = s"COALESCE(q_geo, v_geo)",
+    level = s"COALESCE(q_level, v_level)"
 }
 select {
-    product_code = product_code_clean,
+    product_code,
     year,
-    geo = reporter,
+    geo,
     level,
-    production_volume_tonnes,
-    production_value_eur
+    production_volume_tonnes = quantity_converted.production_volume_tonnes,
+    production_value_eur = value_data.production_value_eur
 }
-# Group by dimensions to aggregate volumes and values
 group {product_code, year, geo, level} (
     aggregate {
         production_volume_tonnes = max production_volume_tonnes,
         production_value_eur = max production_value_eur
     }
 )
-# Filter out records with both null values
 filter production_volume_tonnes != null || production_value_eur != null
 sort {product_code, geo}

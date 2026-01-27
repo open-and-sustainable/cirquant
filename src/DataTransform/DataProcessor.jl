@@ -251,6 +251,7 @@ Creates temporary table: prodcom_converted_YYYY
 """
 function step2_process_unit_conversions(year::Int, config::ProcessingConfig, conn::DuckDB.Connection)
     @info "Step 2: Converting units for quantities and volumes..."
+    _ensure_prodcom_unit_weights_table(config)
     prql_path = joinpath(PRQL_DIR, "unit_conversion.prql")
     table_name = "prodcom_converted_$(year)"
 
@@ -265,6 +266,19 @@ function step2_process_unit_conversions(year::Int, config::ProcessingConfig, con
         prql_query,
         table_name
     )
+end
+
+function _ensure_prodcom_unit_weights_table(config::ProcessingConfig)
+    weights = get(config.analysis_params, "product_weights_tonnes", Dict{String,Any}())
+    product_codes = String[]
+    weight_tonnes = Float64[]
+    for (code, weight) in weights
+        push!(product_codes, String(code))
+        push!(weight_tonnes, Float64(weight))
+    end
+    isempty(product_codes) && return
+    df = DataFrame(product_code=product_codes, weight_tonnes=weight_tonnes)
+    DatabaseAccess.write_duckdb_table!(df, config.source_db, "prodcom_unit_weights")
 end
 
 """

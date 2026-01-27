@@ -7,8 +7,19 @@ let unit_data = (
     filter indicators == "QNTUNIT"
     select {
         product_code = prccode,
-        unit = value,
+        unit_raw = value,
         geo = reporter
+    }
+    derive {
+        unit = s"lower(unit_raw)"
+    }
+)
+
+let weight_data = (
+    from prodcom_unit_weights
+    select {
+        product_code,
+        weight_tonnes
     }
 )
 
@@ -32,6 +43,7 @@ let quantity_data = (
 # Join quantity data with units
 from quantity_data
 join side:left unit_data (quantity_data.product_code == unit_data.product_code && quantity_data.geo == unit_data.geo)
+join side:left weight_data (quantity_data.product_code == weight_data.product_code)
 derive {
     # Apply conversion factors based on unit type
     conversion_factor = s"""
@@ -41,16 +53,9 @@ derive {
             WHEN unit_data.unit = 't' THEN 1.0     -- already tonnes
 
             -- Piece/unit conversions (product-specific)
-            WHEN unit_data.unit = 'p/st' THEN
+            WHEN unit_data.unit IN ('p/st', 'pst') THEN
                 CASE
-                    -- Heat pumps (PRODCOM 28.21.13.30 without dots is 28211330)
-                    WHEN quantity_data.product_code = '28211330' THEN 0.100  -- ~100kg per unit
-                    -- PV panels (27.11.40.00 without dots is 27114000)
-                    WHEN quantity_data.product_code = '27114000' THEN 0.020  -- ~20kg per panel
-                    -- Batteries (prefix 2720)
-                    WHEN LEFT(quantity_data.product_code, 4) = '2720' THEN 0.025  -- ~25kg average
-                    -- ICT equipment (prefix 2620)
-                    WHEN LEFT(quantity_data.product_code, 4) = '2620' THEN 0.005  -- ~5kg average
+                    WHEN weight_data.weight_tonnes IS NOT NULL THEN weight_data.weight_tonnes
                     -- Default for pieces
                     ELSE 0.010  -- 10kg default
                 END
