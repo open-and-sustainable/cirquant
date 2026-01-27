@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 title: CirQuant
 message: >-
-  v0.1.1 - Revision of UMP data fetching and docs.
+  v0.1.2 - Fix PV panel mass computation.
 type: software
 doi: 10.5281/zenodo.18121735
 authors:

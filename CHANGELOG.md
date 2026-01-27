@@ -9,6 +9,10 @@ Removed: For features removed in this release.
 Fixed: For any bug fixes.
 Security: For vulnerabilities.
 
+## [0.1.2] - 2026-01-27
+### Fixed
+- Unit counting and mass estimation for PV panels
+
 ## [0.1.1] - 2026-01-03
 ### Changed
 - Refactoring of test fetching script and approach
